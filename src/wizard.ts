@@ -17,7 +17,7 @@ interface WizardOptions {
 
 interface WizardAnswers {
   projectName: string;
-  template: 'light' | 'crypto' | 'nanobot';
+  template: 'nanobot' | 'openclaw';
   agentName: string;
   description: string;
   twitter?: string;
@@ -119,9 +119,7 @@ async function runScaffold(
       const keypair = loadKeypair(path.join(projectPath, 'wallet.json'));
       
       // Build capabilities from selected skills + template defaults
-      const baseCapabilities = answers.template === 'crypto' 
-        ? ['solana', 'defi', 'wallet'] 
-        : ['chat', 'assistant'];
+      const baseCapabilities = ['solana', 'wallet', 'chat', 'assistant'];
       const skills = answers.skills || [];
       const capabilities = [...new Set([...baseCapabilities, ...skills])];
       
@@ -163,13 +161,16 @@ async function runScaffold(
   console.log(chalk.gray('  3. npm start'));
   console.log('');
   
-  if (answers.template === 'crypto') {
-    console.log(chalk.cyan('Your agent can:'));
-    console.log(chalk.gray('  • Check SOL and token balances'));
-    console.log(chalk.gray('  • Get real-time token prices'));
-    console.log(chalk.gray('  • More tools coming soon...'));
-    console.log('');
+  console.log(chalk.cyan('Your agent can:'));
+  console.log(chalk.gray('  • Check SOL and token balances'));
+  console.log(chalk.gray('  • Sign transactions and messages'));
+  console.log(chalk.gray('  • Verify SAID identities'));
+  if (answers.template === 'nanobot') {
+    console.log(chalk.gray('  • Run on Telegram/WhatsApp'));
+  } else {
+    console.log(chalk.gray('  • Full Clawdbot capabilities'));
   }
+  console.log('');
   
   console.log(chalk.cyan('Upgrade to on-chain (optional):'));
   console.log(chalk.gray('  • Fund wallet with 0.005 SOL'));
@@ -194,7 +195,7 @@ export async function runWizard(projectName?: string, options: WizardOptions = {
     const agentName = options.name || projectName.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
     const answers: WizardAnswers = {
       projectName,
-      template: (options.template as 'light' | 'crypto') || 'light',
+      template: (options.template as 'nanobot' | 'openclaw') || 'nanobot',
       agentName,
       description: options.description || `${agentName} - AI Agent powered by Claude`,
     };
@@ -224,16 +225,12 @@ export async function runWizard(projectName?: string, options: WizardOptions = {
       message: 'Template:',
       choices: [
         { 
-          name: 'nanobot - Full agent with Telegram/WhatsApp (recommended)', 
+          name: 'nanobot - Lightweight agent, runs anywhere (recommended)', 
           value: 'nanobot' 
         },
         { 
-          name: 'light - Simple CLI chatbot', 
-          value: 'light' 
-        },
-        { 
-          name: 'crypto - CLI chatbot with Solana tools', 
-          value: 'crypto' 
+          name: 'openclaw - Full Clawdbot framework, needs VPS/Mac Mini', 
+          value: 'openclaw' 
         }
       ],
       default: options.template || 'nanobot'

@@ -6,7 +6,7 @@ import chalk from 'chalk';
 interface ScaffoldOptions {
   projectName: string;
   projectPath: string;
-  template: 'light' | 'crypto' | 'nanobot';
+  template: 'nanobot' | 'openclaw';
   agentName: string;
   description: string;
   twitter?: string;
@@ -847,6 +847,203 @@ npx said-sdk register -k wallet.json -n "${agentName}"
 }
 
 /**
+ * Scaffold the openclaw template (full Clawdbot framework)
+ */
+function scaffoldOpenclaw(options: ScaffoldOptions): void {
+  const { projectPath, projectName, agentName, description } = options;
+  
+  // Create directories
+  fs.ensureDirSync(path.join(projectPath, 'skills', 'solana'));
+  
+  // package.json
+  const packageJson = {
+    name: projectName,
+    version: '0.1.0',
+    scripts: {
+      start: 'clawdbot gateway start',
+      stop: 'clawdbot gateway stop',
+      status: 'clawdbot status'
+    },
+    dependencies: {
+      'clawdbot': 'latest'
+    }
+  };
+  fs.writeJsonSync(path.join(projectPath, 'package.json'), packageJson, { spaces: 2 });
+  
+  // AGENTS.md
+  const agentsMd = `# ${agentName}
+
+${description}
+
+## Setup
+
+This agent runs on Clawdbot (OpenClaw).
+
+1. Install: \`npm install\`
+2. Configure: Copy config below to \`~/.clawdbot/config.yaml\`
+3. Run: \`npm start\`
+
+## SAID Identity
+
+Check \`said.json\` for your on-chain identity.
+`;
+  fs.writeFileSync(path.join(projectPath, 'AGENTS.md'), agentsMd);
+  
+  // Clawdbot config template
+  const configYaml = `# Clawdbot Configuration for ${agentName}
+# Copy to ~/.clawdbot/config.yaml
+
+llm:
+  provider: anthropic
+  model: claude-sonnet-4-20250514
+
+channels:
+  telegram:
+    enabled: false
+    token: \${TELEGRAM_BOT_TOKEN}
+
+skills:
+  - ./skills/solana
+`;
+  fs.writeFileSync(path.join(projectPath, 'config.yaml'), configYaml);
+  
+  // Solana skill SKILL.md
+  const skillMd = `---
+name: said-solana
+version: 1.0.0
+description: Solana wallet and transaction skill for SAID-verified AI agents.
+---
+
+# SAID Solana Skill
+
+## Tools
+
+- \`get_balance\` - Check SOL balance
+- \`get_token_balances\` - Check SPL tokens
+- \`send_sol\` - Transfer SOL
+- \`sign_message\` - Sign messages
+- \`verify_agent\` - Check SAID identity
+- \`lookup_agent\` - Get SAID profile
+`;
+  fs.writeFileSync(path.join(projectPath, 'skills', 'solana', 'SKILL.md'), skillMd);
+  
+  // Solana skill index.js (simplified)
+  const solanaSkill = `import { Connection, Keypair, PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import fs from 'fs';
+
+const RPC = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+const connection = new Connection(RPC);
+
+function loadWallet() {
+  const sk = JSON.parse(fs.readFileSync('./wallet.json'));
+  return Keypair.fromSecretKey(Uint8Array.from(sk));
+}
+
+export async function getBalance(address) {
+  const pubkey = address ? new PublicKey(address) : loadWallet().publicKey;
+  const lamports = await connection.getBalance(pubkey);
+  return { address: pubkey.toString(), sol: lamports / LAMPORTS_PER_SOL };
+}
+
+export async function getTokenBalances(address) {
+  const pubkey = address ? new PublicKey(address) : loadWallet().publicKey;
+  const accounts = await connection.getParsedTokenAccountsByOwner(pubkey, {
+    programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA')
+  });
+  return accounts.value.map(a => ({
+    mint: a.account.data.parsed.info.mint,
+    amount: a.account.data.parsed.info.tokenAmount.uiAmount
+  })).filter(t => t.amount > 0);
+}
+
+export async function sendSol(to, amount) {
+  const wallet = loadWallet();
+  const tx = new Transaction().add(
+    SystemProgram.transfer({
+      fromPubkey: wallet.publicKey,
+      toPubkey: new PublicKey(to),
+      lamports: Math.floor(amount * LAMPORTS_PER_SOL)
+    })
+  );
+  tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+  tx.sign(wallet);
+  const sig = await connection.sendRawTransaction(tx.serialize());
+  return { signature: sig, explorer: \`https://solscan.io/tx/\${sig}\` };
+}
+
+export async function verifyAgent(wallet) {
+  const res = await fetch(\`https://api.saidprotocol.com/api/agents/\${wallet}\`);
+  if (!res.ok) return { verified: false };
+  const agent = await res.json();
+  return { verified: true, name: agent.name, isVerified: agent.isVerified };
+}
+
+export const tools = [
+  { name: 'get_balance', handler: getBalance },
+  { name: 'get_token_balances', handler: getTokenBalances },
+  { name: 'send_sol', handler: sendSol },
+  { name: 'verify_agent', handler: verifyAgent }
+];
+`;
+  fs.writeFileSync(path.join(projectPath, 'skills', 'solana', 'index.js'), solanaSkill);
+  
+  // .env.example
+  fs.writeFileSync(path.join(projectPath, '.env.example'), `ANTHROPIC_API_KEY=sk-ant-...
+TELEGRAM_BOT_TOKEN=
+SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
+`);
+  fs.writeFileSync(path.join(projectPath, '.env'), `ANTHROPIC_API_KEY=
+TELEGRAM_BOT_TOKEN=
+SOLANA_RPC_URL=
+`);
+  
+  // .gitignore
+  fs.writeFileSync(path.join(projectPath, '.gitignore'), `wallet.json
+.env
+node_modules/
+`);
+  
+  // README
+  const readme = `# ${agentName}
+
+${description}
+
+An AI agent powered by [Clawdbot](https://github.com/clawdbot/clawdbot) with verified identity on [SAID Protocol](https://www.saidprotocol.com).
+
+## Requirements
+
+- Node.js 18+
+- VPS or Mac Mini (400k+ lines of code)
+- Telegram bot token (optional)
+
+## Quick Start
+
+\`\`\`bash
+npm install
+npm start
+\`\`\`
+
+## Solana Skill
+
+Pre-installed with:
+- Balance checks (SOL + tokens)
+- SOL transfers
+- Message signing
+- SAID identity verification
+
+## Configuration
+
+Copy \`config.yaml\` to \`~/.clawdbot/config.yaml\` and configure.
+
+## Links
+
+- [Clawdbot Docs](https://docs.clawd.bot)
+- [SAID Protocol](https://www.saidprotocol.com)
+`;
+  fs.writeFileSync(path.join(projectPath, 'README.md'), readme);
+}
+
+/**
  * Main scaffold function
  */
 export async function scaffold(options: ScaffoldOptions): Promise<void> {
@@ -865,10 +1062,10 @@ export async function scaffold(options: ScaffoldOptions): Promise<void> {
   
   if (template === 'nanobot') {
     scaffoldNanobot(options);
-  } else if (template === 'crypto') {
-    scaffoldCrypto(options);
+  } else if (template === 'openclaw') {
+    scaffoldOpenclaw(options);
   } else {
-    scaffoldLight(options);
+    scaffoldNanobot(options); // Default to nanobot
   }
   
   console.log(chalk.green('✓ Project scaffolded'));
