@@ -60,28 +60,21 @@ function signMessage(message: string, keypair: Keypair): string {
 }
 
 /**
- * Register an agent on SAID Protocol (sponsored - free)
+ * Register an agent on SAID Protocol (pending - free, instant)
  */
 export async function registerAgent(options: RegisterOptions): Promise<RegisterResult> {
   const { keypair, name, description, projectPath, twitter, website, capabilities } = options;
   const wallet = keypair.publicKey.toString();
-  const timestamp = Date.now();
-  
-  // Sign the registration message
-  const message = getRegistrationMessage(wallet, name, timestamp);
-  const signature = signMessage(message, keypair);
   
   try {
-    // Call sponsored registration endpoint
-    const response = await fetch(`${API_BASE}/api/register/sponsored`, {
+    // Call pending registration endpoint (free, off-chain)
+    const response = await fetch(`${API_BASE}/api/register/pending`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         wallet,
         name,
         description,
-        signature,
-        timestamp,
         twitter,
         website,
         capabilities
@@ -100,45 +93,17 @@ export async function registerAgent(options: RegisterOptions): Promise<RegisterR
         metadataUri: result.metadataUri,
         profile: result.profile,
         badge: result.badge,
+        status: 'PENDING',
         registeredAt: new Date().toISOString(),
-        sponsored: result.sponsored,
-        slotsRemaining: result.slotsRemaining
       };
       
       await fs.writeJson(path.join(projectPath, 'said.json'), saidJson, { spaces: 2 });
       
       return {
         success: true,
-        sponsored: result.sponsored,
+        sponsored: false,
         pda: result.pda,
         profile: result.profile,
-        slotsRemaining: result.slotsRemaining
-      };
-    } else if (response.status === 409) {
-      // Already registered - still success, just load existing info
-      const saidJson = {
-        wallet,
-        pda: result.pda,
-        name,
-        description,
-        profile: result.profile,
-        registeredAt: new Date().toISOString(),
-        note: 'Already registered'
-      };
-      
-      await fs.writeJson(path.join(projectPath, 'said.json'), saidJson, { spaces: 2 });
-      
-      return {
-        success: true,
-        pda: result.pda,
-        profile: result.profile,
-        error: 'Wallet already registered (not an error)'
-      };
-    } else if (response.status === 410) {
-      // Sponsorship exhausted
-      return {
-        success: false,
-        error: 'Sponsorship pool exhausted. Fund wallet with 0.005 SOL and run: npm run register'
       };
     } else {
       return {

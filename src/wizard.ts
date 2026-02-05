@@ -10,6 +10,9 @@ interface WizardOptions {
   template?: string;
   skipInstall?: boolean;
   skipRegister?: boolean;
+  yes?: boolean;
+  name?: string;
+  description?: string;
 }
 
 interface WizardAnswers {
@@ -51,6 +54,115 @@ async function checkSponsorship(): Promise<{ available: boolean; remaining: numb
 }
 
 /**
+ * Run the scaffold and registration process
+ */
+async function runScaffold(
+  answers: WizardAnswers, 
+  options: WizardOptions, 
+  sponsorship: { available: boolean; remaining: number }
+): Promise<void> {
+  const projectPath = path.resolve(process.cwd(), answers.projectName);
+  
+  console.log('');
+  console.log(chalk.cyan('Creating your agent...'));
+  console.log('');
+
+  // Step 1: Scaffold the project
+  const scaffoldSpinner = ora('Scaffolding project...').start();
+  try {
+    await scaffold({
+      projectName: answers.projectName,
+      projectPath,
+      template: answers.template,
+      agentName: answers.agentName,
+      description: answers.description,
+      twitter: answers.twitter || undefined,
+      website: answers.website || undefined
+    });
+    scaffoldSpinner.succeed('Project scaffolded');
+  } catch (error: any) {
+    scaffoldSpinner.fail('Failed to scaffold project');
+    throw error;
+  }
+
+  // Step 2: Install dependencies
+  if (!options.skipInstall) {
+    const installSpinner = ora('Installing dependencies...').start();
+    try {
+      const { execSync } = await import('child_process');
+      execSync('npm install', { cwd: projectPath, stdio: 'pipe' });
+      installSpinner.succeed('Dependencies installed');
+    } catch {
+      installSpinner.warn('Failed to install dependencies. Run npm install manually.');
+    }
+  }
+
+  // Step 3: Register on SAID (off-chain, instant, free)
+  if (!options.skipRegister) {
+    const registerSpinner = ora('Registering on SAID Protocol (instant, FREE)...').start();
+    
+    try {
+      const keypair = loadKeypair(path.join(projectPath, 'wallet.json'));
+      
+      const result = await registerAgent({
+        keypair,
+        name: answers.agentName,
+        description: answers.description,
+        projectPath,
+        twitter: answers.twitter || undefined,
+        website: answers.website || undefined,
+        capabilities: answers.template === 'crypto' 
+          ? ['solana', 'defi', 'wallet'] 
+          : ['chat', 'assistant']
+      });
+      
+      if (result.success) {
+        registerSpinner.succeed(chalk.green('Registered on SAID Protocol'));
+        if (result.pda) {
+          console.log(chalk.gray(`  PDA: ${result.pda}`));
+        }
+        if (result.profile) {
+          console.log(chalk.gray(`  Profile: ${result.profile}`));
+        }
+        console.log(chalk.yellow(`  Status: PENDING (off-chain)`));
+      } else {
+        registerSpinner.warn(`Registration note: ${result.error}`);
+      }
+    } catch (error: any) {
+      registerSpinner.warn(`Could not register: ${error.message}`);
+    }
+  }
+
+  // Done!
+  console.log('');
+  console.log(chalk.green('✨ Agent created successfully!'));
+  console.log('');
+  console.log(chalk.cyan('Next steps:'));
+  console.log('');
+  console.log(chalk.gray(`  1. cd ${answers.projectName}`));
+  console.log(chalk.gray('  2. Add your Anthropic API key to .env'));
+  console.log(chalk.gray('  3. npm start'));
+  console.log('');
+  
+  if (answers.template === 'crypto') {
+    console.log(chalk.cyan('Your agent can:'));
+    console.log(chalk.gray('  • Check SOL and token balances'));
+    console.log(chalk.gray('  • Get real-time token prices'));
+    console.log(chalk.gray('  • More tools coming soon...'));
+    console.log('');
+  }
+  
+  console.log(chalk.cyan('Upgrade to on-chain (optional):'));
+  console.log(chalk.gray('  • Fund wallet with 0.005 SOL'));
+  console.log(chalk.gray('  • Run: npm run anchor'));
+  console.log(chalk.gray('  • Get verified badge: npm run verify (0.01 SOL)'));
+  console.log('');
+  
+  console.log(chalk.gray('Docs: https://www.saidprotocol.com/docs.html'));
+  console.log('');
+}
+
+/**
  * Run the interactive wizard
  */
 export async function runWizard(projectName?: string, options: WizardOptions = {}): Promise<void> {
@@ -58,7 +170,19 @@ export async function runWizard(projectName?: string, options: WizardOptions = {
   const sponsorship = await checkSponsorship();
   console.log('');
   
-  // Gather project info
+  // Non-interactive mode with --yes flag
+  if (options.yes && projectName) {
+    const agentName = options.name || projectName.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    const answers: WizardAnswers = {
+      projectName,
+      template: (options.template as 'light' | 'crypto') || 'light',
+      agentName,
+      description: options.description || `${agentName} - AI Agent powered by Claude`,
+    };
+    return runScaffold(answers, options, sponsorship);
+  }
+  
+  // Gather project info interactively
   const answers = await inquirer.prompt<WizardAnswers>([
     {
       type: 'input',
@@ -95,9 +219,9 @@ export async function runWizard(projectName?: string, options: WizardOptions = {
       type: 'input',
       name: 'agentName',
       message: 'Agent name (human readable):',
-      default: (answers: any) => {
+      default: (ans: any) => {
         // Convert project-name to Project Name
-        return answers.projectName
+        return ans.projectName
           .split('-')
           .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
           .join(' ');
@@ -122,111 +246,5 @@ export async function runWizard(projectName?: string, options: WizardOptions = {
     }
   ]);
 
-  const projectPath = path.resolve(process.cwd(), answers.projectName);
-  
-  console.log('');
-  console.log(chalk.cyan('Creating your agent...'));
-  console.log('');
-
-  // Step 1: Scaffold the project
-  const scaffoldSpinner = ora('Scaffolding project...').start();
-  try {
-    await scaffold({
-      projectName: answers.projectName,
-      projectPath,
-      template: answers.template,
-      agentName: answers.agentName,
-      description: answers.description,
-      twitter: answers.twitter || undefined,
-      website: answers.website || undefined
-    });
-    scaffoldSpinner.succeed('Project scaffolded');
-  } catch (error: any) {
-    scaffoldSpinner.fail('Failed to scaffold project');
-    throw error;
-  }
-
-  // Step 2: Install dependencies
-  if (!options.skipInstall) {
-    const installSpinner = ora('Installing dependencies...').start();
-    try {
-      const { execSync } = await import('child_process');
-      execSync('npm install', { cwd: projectPath, stdio: 'pipe' });
-      installSpinner.succeed('Dependencies installed');
-    } catch (error) {
-      installSpinner.warn('Failed to install dependencies. Run npm install manually.');
-    }
-  }
-
-  // Step 3: Register on SAID
-  if (!options.skipRegister) {
-    console.log('');
-    
-    if (sponsorship.available) {
-      // Free registration available
-      const registerSpinner = ora('Registering on SAID Protocol (sponsored - FREE)...').start();
-      
-      try {
-        const keypair = loadKeypair(path.join(projectPath, 'wallet.json'));
-        
-        const result = await registerAgent({
-          keypair,
-          name: answers.agentName,
-          description: answers.description,
-          projectPath,
-          twitter: answers.twitter || undefined,
-          website: answers.website || undefined,
-          capabilities: answers.template === 'crypto' 
-            ? ['solana', 'defi', 'wallet'] 
-            : ['chat', 'assistant']
-        });
-        
-        if (result.success) {
-          registerSpinner.succeed(chalk.green('Registered on SAID Protocol (sponsored)'));
-          if (result.pda) {
-            console.log(chalk.gray(`  PDA: ${result.pda}`));
-          }
-          if (result.profile) {
-            console.log(chalk.gray(`  Profile: ${result.profile}`));
-          }
-        } else {
-          registerSpinner.warn(`Registration note: ${result.error}`);
-        }
-      } catch (error: any) {
-        registerSpinner.warn(`Could not register: ${error.message}`);
-      }
-    } else {
-      // No sponsorship - manual registration required
-      console.log(chalk.yellow('⚠️  Sponsorship pool is full. Manual registration required:'));
-      console.log('');
-      console.log(chalk.gray('  1. Fund your wallet with ~0.005 SOL:'));
-      const keypair = loadKeypair(path.join(projectPath, 'wallet.json'));
-      console.log(chalk.white(`     ${keypair.publicKey.toString()}`));
-      console.log('');
-      console.log(chalk.gray('  2. Run:'));
-      console.log(chalk.white(`     cd ${answers.projectName} && npm run register`));
-    }
-  }
-
-  // Done!
-  console.log('');
-  console.log(chalk.green('✨ Agent created successfully!'));
-  console.log('');
-  console.log(chalk.cyan('Next steps:'));
-  console.log('');
-  console.log(chalk.gray(`  1. cd ${answers.projectName}`));
-  console.log(chalk.gray('  2. Add your Anthropic API key to .env'));
-  console.log(chalk.gray('  3. npm start'));
-  console.log('');
-  
-  if (answers.template === 'crypto') {
-    console.log(chalk.cyan('Your agent can:'));
-    console.log(chalk.gray('  • Check SOL and token balances'));
-    console.log(chalk.gray('  • Get real-time token prices'));
-    console.log(chalk.gray('  • More tools coming soon...'));
-    console.log('');
-  }
-  
-  console.log(chalk.gray('Docs: https://www.saidprotocol.com/docs.html'));
-  console.log('');
+  return runScaffold(answers, options, sponsorship);
 }

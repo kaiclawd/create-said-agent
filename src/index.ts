@@ -30,6 +30,9 @@ program
   .option('-t, --template <template>', 'Template to use (light | crypto)', 'light')
   .option('--skip-install', 'Skip npm install')
   .option('--skip-register', 'Skip SAID registration')
+  .option('-y, --yes', 'Skip prompts and use defaults')
+  .option('--name <name>', 'Agent name (human readable)')
+  .option('--description <desc>', 'Agent description')
   .action(async (projectName, options) => {
     try {
       await runWizard(projectName, options);
