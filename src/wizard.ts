@@ -17,7 +17,7 @@ interface WizardOptions {
 
 interface WizardAnswers {
   projectName: string;
-  template: 'light' | 'crypto';
+  template: 'light' | 'crypto' | 'nanobot';
   agentName: string;
   description: string;
   twitter?: string;
@@ -224,15 +224,19 @@ export async function runWizard(projectName?: string, options: WizardOptions = {
       message: 'Template:',
       choices: [
         { 
-          name: 'light - Simple chatbot with SAID identity', 
+          name: 'nanobot - Full agent with Telegram/WhatsApp (recommended)', 
+          value: 'nanobot' 
+        },
+        { 
+          name: 'light - Simple CLI chatbot', 
           value: 'light' 
         },
         { 
-          name: 'crypto - Full Solana agent with wallet & DeFi tools', 
+          name: 'crypto - CLI chatbot with Solana tools', 
           value: 'crypto' 
         }
       ],
-      default: options.template || 'light'
+      default: options.template || 'nanobot'
     },
     {
       type: 'input',

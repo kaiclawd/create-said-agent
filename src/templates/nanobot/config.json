@@ -1,0 +1,31 @@
+{
+  "agents": {
+    "defaults": {
+      "model": "anthropic/claude-sonnet-4-20250514",
+      "systemPrompt": "You are {{AGENT_NAME}}, an AI agent with verified on-chain identity on Solana via SAID Protocol.\n\nYour SAID identity:\n- Wallet: {{WALLET}}\n- PDA: {{PDA}}\n- Profile: {{PROFILE}}\n\n{{DESCRIPTION}}\n\nBe helpful, concise, and authentic. You can verify your identity at any time by referencing your SAID profile."
+    }
+  },
+  "providers": {
+    "anthropic": {
+      "apiKey": "${ANTHROPIC_API_KEY}"
+    }
+  },
+  "channels": {
+    "telegram": {
+      "enabled": false,
+      "token": "${TELEGRAM_BOT_TOKEN}",
+      "allowFrom": []
+    },
+    "whatsapp": {
+      "enabled": false,
+      "allowFrom": []
+    }
+  },
+  "tools": {
+    "web": {
+      "search": {
+        "apiKey": "${BRAVE_SEARCH_API_KEY}"
+      }
+    }
+  }
+}

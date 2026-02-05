@@ -6,7 +6,7 @@ import chalk from 'chalk';
 interface ScaffoldOptions {
   projectName: string;
   projectPath: string;
-  template: 'light' | 'crypto';
+  template: 'light' | 'crypto' | 'nanobot';
   agentName: string;
   description: string;
   twitter?: string;
@@ -646,6 +646,207 @@ See \`said.json\` for your PDA and profile URL.
 }
 
 /**
+ * Scaffold the nanobot template (full agent with channels)
+ */
+function scaffoldNanobot(options: ScaffoldOptions): void {
+  const { projectPath, projectName, agentName, description, twitter, website } = options;
+  
+  // Create directories
+  fs.ensureDirSync(path.join(projectPath, 'tools'));
+  
+  // config.json for nanobot
+  const config = {
+    agents: {
+      defaults: {
+        model: "anthropic/claude-sonnet-4-20250514",
+        systemPrompt: `You are ${agentName}, an AI agent with verified on-chain identity on Solana via SAID Protocol.
+
+${description}
+
+Your identity is verifiable at your SAID profile. Be helpful, concise, and authentic.`
+      }
+    },
+    providers: {
+      anthropic: {
+        apiKey: "${ANTHROPIC_API_KEY}"
+      }
+    },
+    channels: {
+      telegram: {
+        enabled: false,
+        token: "${TELEGRAM_BOT_TOKEN}",
+        allowFrom: []
+      },
+      whatsapp: {
+        enabled: false,
+        allowFrom: []
+      }
+    },
+    tools: {
+      web: {
+        search: {
+          apiKey: "${BRAVE_SEARCH_API_KEY}"
+        }
+      }
+    }
+  };
+  fs.writeJsonSync(path.join(projectPath, 'config.json'), config, { spaces: 2 });
+  
+  // Solana tools
+  const solanaTools = `"""
+Solana tools for nanobot agents with SAID identity.
+"""
+
+import json
+import os
+from pathlib import Path
+import urllib.request
+
+# Load SAID identity
+def load_said_identity():
+    said_path = Path(__file__).parent.parent / "said.json"
+    if said_path.exists():
+        with open(said_path) as f:
+            return json.load(f)
+    return None
+
+SAID_IDENTITY = load_said_identity()
+
+def get_sol_balance(wallet_address: str = None) -> dict:
+    """Get SOL balance for a wallet address."""
+    try:
+        from solana.rpc.api import Client
+        from solders.pubkey import Pubkey
+    except ImportError:
+        return {"error": "Install solana: pip install solana"}
+    
+    address = wallet_address or (SAID_IDENTITY.get("wallet") if SAID_IDENTITY else None)
+    if not address:
+        return {"error": "No wallet address"}
+    
+    try:
+        client = Client(os.getenv("SOLANA_RPC_URL", "https://api.mainnet-beta.solana.com"))
+        pubkey = Pubkey.from_string(address)
+        lamports = client.get_balance(pubkey).value
+        return {"wallet": address, "balance_sol": lamports / 1e9}
+    except Exception as e:
+        return {"error": str(e)}
+
+def get_my_identity() -> dict:
+    """Get this agent's SAID identity."""
+    if not SAID_IDENTITY:
+        return {"error": "SAID identity not found"}
+    return {
+        "name": SAID_IDENTITY.get("name"),
+        "wallet": SAID_IDENTITY.get("wallet"),
+        "pda": SAID_IDENTITY.get("pda"),
+        "profile": SAID_IDENTITY.get("profile"),
+        "status": SAID_IDENTITY.get("status", "PENDING")
+    }
+
+def verify_agent(wallet_address: str) -> dict:
+    """Verify another agent's SAID identity."""
+    try:
+        url = f"https://api.saidprotocol.com/api/agents/{wallet_address}"
+        with urllib.request.urlopen(url, timeout=10) as resp:
+            data = json.loads(resp.read().decode())
+            return {
+                "verified": True,
+                "name": data.get("name"),
+                "wallet": data.get("wallet"),
+                "isVerified": data.get("isVerified"),
+                "profile": f"https://www.saidprotocol.com/agent.html?wallet={wallet_address}"
+            }
+    except Exception as e:
+        return {"verified": False, "error": str(e)}
+`;
+  fs.writeFileSync(path.join(projectPath, 'tools', 'solana.py'), solanaTools);
+  
+  // .env.example
+  const envExample = `# Required: LLM Provider
+ANTHROPIC_API_KEY=sk-ant-...
+
+# Optional: Telegram Bot
+TELEGRAM_BOT_TOKEN=123456:ABC...
+
+# Optional: Web Search  
+BRAVE_SEARCH_API_KEY=BSA-...
+
+# Optional: Custom Solana RPC
+SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
+`;
+  fs.writeFileSync(path.join(projectPath, '.env.example'), envExample);
+  fs.writeFileSync(path.join(projectPath, '.env'), envExample.replace(/=.+/g, '='));
+  
+  // .gitignore
+  fs.writeFileSync(path.join(projectPath, '.gitignore'), `wallet.json
+.env
+__pycache__/
+*.pyc
+`);
+  
+  // README.md
+  const readme = `# ${agentName}
+
+An AI agent powered by [nanobot](https://github.com/HKUDS/nanobot) with verified identity on [SAID Protocol](https://www.saidprotocol.com).
+
+## Quick Start
+
+### 1. Install nanobot
+
+\`\`\`bash
+pip install nanobot-ai
+\`\`\`
+
+### 2. Configure
+
+\`\`\`bash
+# Copy config to nanobot directory
+mkdir -p ~/.nanobot
+cp config.json ~/.nanobot/config.json
+
+# Set API key
+export ANTHROPIC_API_KEY="sk-ant-..."
+\`\`\`
+
+### 3. Run
+
+**CLI mode:**
+\`\`\`bash
+nanobot agent -m "Hello! Who are you?"
+\`\`\`
+
+**Telegram/WhatsApp mode:**
+\`\`\`bash
+nanobot gateway
+\`\`\`
+
+## Telegram Setup
+
+1. Create bot with [@BotFather](https://t.me/BotFather)
+2. Get your user ID from [@userinfobot](https://t.me/userinfobot)  
+3. Update config.json with token and allowFrom
+4. Run \`nanobot gateway\`
+
+## SAID Identity
+
+Your agent has verified on-chain identity. Check \`said.json\` for details.
+
+**Upgrade to on-chain:**
+\`\`\`bash
+# Fund wallet with ~0.005 SOL, then:
+npx said-sdk register -k wallet.json -n "${agentName}"
+\`\`\`
+
+## Links
+
+- [SAID Protocol](https://www.saidprotocol.com)
+- [nanobot Docs](https://github.com/HKUDS/nanobot)
+`;
+  fs.writeFileSync(path.join(projectPath, 'README.md'), readme);
+}
+
+/**
  * Main scaffold function
  */
 export async function scaffold(options: ScaffoldOptions): Promise<void> {
@@ -662,7 +863,9 @@ export async function scaffold(options: ScaffoldOptions): Promise<void> {
   // Scaffold based on template
   console.log(chalk.blue(`Scaffolding ${template} template...`));
   
-  if (template === 'crypto') {
+  if (template === 'nanobot') {
+    scaffoldNanobot(options);
+  } else if (template === 'crypto') {
     scaffoldCrypto(options);
   } else {
     scaffoldLight(options);
