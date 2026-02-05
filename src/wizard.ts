@@ -22,7 +22,21 @@ interface WizardAnswers {
   description: string;
   twitter?: string;
   website?: string;
+  skills?: string[];
 }
+
+const SKILL_CHOICES = [
+  { name: 'Trading & DeFi — swaps, prices, portfolio', value: 'trading' },
+  { name: 'Social Media — Twitter, Discord, Telegram', value: 'social' },
+  { name: 'Research & Analysis — search, data, market intel', value: 'research' },
+  { name: 'Content Creation — writing, images, video', value: 'content' },
+  { name: 'Customer Support — chat, FAQ, tickets', value: 'support' },
+  { name: 'Code & Development — generate, debug, deploy', value: 'coding' },
+  { name: 'Data Processing — scraping, ETL, formatting', value: 'data' },
+  { name: 'Automation — scheduling, workflows', value: 'automation' },
+  { name: 'Gaming & NFTs — game bots, metaverse', value: 'gaming' },
+  { name: 'Payments & Finance — invoicing, accounting', value: 'finance' },
+];
 
 interface SponsorshipStatus {
   available: boolean;
@@ -104,6 +118,13 @@ async function runScaffold(
     try {
       const keypair = loadKeypair(path.join(projectPath, 'wallet.json'));
       
+      // Build capabilities from selected skills + template defaults
+      const baseCapabilities = answers.template === 'crypto' 
+        ? ['solana', 'defi', 'wallet'] 
+        : ['chat', 'assistant'];
+      const skills = answers.skills || [];
+      const capabilities = [...new Set([...baseCapabilities, ...skills])];
+      
       const result = await registerAgent({
         keypair,
         name: answers.agentName,
@@ -111,9 +132,7 @@ async function runScaffold(
         projectPath,
         twitter: answers.twitter || undefined,
         website: answers.website || undefined,
-        capabilities: answers.template === 'crypto' 
-          ? ['solana', 'defi', 'wallet'] 
-          : ['chat', 'assistant']
+        capabilities
       });
       
       if (result.success) {
@@ -243,6 +262,13 @@ export async function runWizard(projectName?: string, options: WizardOptions = {
       type: 'input',
       name: 'website',
       message: 'Website (optional):'
+    },
+    {
+      type: 'checkbox',
+      name: 'skills',
+      message: 'What can your agent do? (select with space):',
+      choices: SKILL_CHOICES,
+      default: (ans: any) => ans.template === 'crypto' ? ['trading'] : []
     }
   ]);
 
