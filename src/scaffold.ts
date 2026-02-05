@@ -11,6 +11,9 @@ interface ScaffoldOptions {
   description: string;
   twitter?: string;
   website?: string;
+  anthropicKey?: string;
+  telegramToken?: string;
+  telegramUserId?: string;
 }
 
 /**
@@ -655,6 +658,9 @@ function scaffoldNanobot(options: ScaffoldOptions): void {
   fs.ensureDirSync(path.join(projectPath, 'tools'));
   
   // config.json for nanobot
+  const telegramEnabled = !!options.telegramToken;
+  const telegramAllowFrom = options.telegramUserId ? [options.telegramUserId] : [];
+  
   const config = {
     agents: {
       defaults: {
@@ -673,9 +679,9 @@ Your identity is verifiable at your SAID profile. Be helpful, concise, and authe
     },
     channels: {
       telegram: {
-        enabled: false,
+        enabled: telegramEnabled,
         token: "${TELEGRAM_BOT_TOKEN}",
-        allowFrom: []
+        allowFrom: telegramAllowFrom
       },
       whatsapp: {
         enabled: false,
@@ -776,7 +782,21 @@ BRAVE_SEARCH_API_KEY=BSA-...
 SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
 `;
   fs.writeFileSync(path.join(projectPath, '.env.example'), envExample);
-  fs.writeFileSync(path.join(projectPath, '.env'), envExample.replace(/=.+/g, '='));
+  
+  // Write actual .env with provided values
+  const envActual = `# LLM Provider
+ANTHROPIC_API_KEY=${options.anthropicKey || ''}
+
+# Telegram Bot
+TELEGRAM_BOT_TOKEN=${options.telegramToken || ''}
+
+# Web Search  
+BRAVE_SEARCH_API_KEY=
+
+# Custom Solana RPC
+SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
+`;
+  fs.writeFileSync(path.join(projectPath, '.env'), envActual);
   
   // .gitignore
   fs.writeFileSync(path.join(projectPath, '.gitignore'), `wallet.json

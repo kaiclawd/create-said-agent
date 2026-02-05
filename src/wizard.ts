@@ -23,6 +23,9 @@ interface WizardAnswers {
   twitter?: string;
   website?: string;
   skills?: string[];
+  anthropicKey?: string;
+  telegramToken?: string;
+  telegramUserId?: string;
 }
 
 const SKILL_CHOICES = [
@@ -91,7 +94,10 @@ async function runScaffold(
       agentName: answers.agentName,
       description: answers.description,
       twitter: answers.twitter || undefined,
-      website: answers.website || undefined
+      website: answers.website || undefined,
+      anthropicKey: answers.anthropicKey || undefined,
+      telegramToken: answers.telegramToken || undefined,
+      telegramUserId: answers.telegramUserId || undefined
     });
     scaffoldSpinner.succeed('Project scaffolded');
   } catch (error: any) {
@@ -150,32 +156,53 @@ async function runScaffold(
     }
   }
 
-  // Done!
+  // Done! Show clear summary
   console.log('');
-  console.log(chalk.green('✨ Agent created successfully!'));
-  console.log('');
-  console.log(chalk.cyan('Next steps:'));
-  console.log('');
-  console.log(chalk.gray(`  1. cd ${answers.projectName}`));
-  console.log(chalk.gray('  2. Add your Anthropic API key to .env'));
-  console.log(chalk.gray('  3. npm start'));
+  console.log(chalk.green(`✨ Agent "${answers.agentName}" created successfully!`));
   console.log('');
   
-  console.log(chalk.cyan('Your agent can:'));
-  console.log(chalk.gray('  • Check SOL and token balances'));
-  console.log(chalk.gray('  • Sign transactions and messages'));
-  console.log(chalk.gray('  • Verify SAID identities'));
+  // Show wallet prominently
+  const walletPath = path.join(projectPath, 'wallet.json');
+  try {
+    const walletData = JSON.parse(fs.readFileSync(walletPath, 'utf8'));
+    const { Keypair } = await import('@solana/web3.js');
+    const keypair = Keypair.fromSecretKey(Uint8Array.from(walletData));
+    console.log(chalk.cyan('📍 Your wallet: ') + chalk.white(keypair.publicKey.toString()));
+  } catch {}
+  
+  // Show profile link
+  console.log(chalk.cyan('🔗 Profile: ') + chalk.gray(`https://www.saidprotocol.com/agent.html?wallet=...`));
+  console.log(chalk.cyan('📁 Location: ') + chalk.gray(projectPath));
+  console.log('');
+  
+  // Smart next steps based on what's configured
+  console.log(chalk.cyan('To run your agent:'));
+  console.log('');
+  console.log(chalk.white(`  cd ${answers.projectName}`));
+  
+  if (!answers.anthropicKey) {
+    console.log(chalk.yellow('  # Add your API key first:'));
+    console.log(chalk.gray('  # Edit .env and add ANTHROPIC_API_KEY=sk-ant-...'));
+  }
+  
   if (answers.template === 'nanobot') {
-    console.log(chalk.gray('  • Run on Telegram/WhatsApp'));
+    console.log(chalk.white('  pip install nanobot-ai'));
+    console.log(chalk.white('  mkdir -p ~/.nanobot && cp config.json ~/.nanobot/'));
+    console.log(chalk.white('  nanobot agent -m "Hello!"'));
   } else {
-    console.log(chalk.gray('  • Full Clawdbot capabilities'));
+    console.log(chalk.white('  npm install'));
+    console.log(chalk.white('  npm start'));
   }
   console.log('');
   
+  if (answers.telegramToken) {
+    console.log(chalk.green('✓ Telegram configured! Run: nanobot gateway'));
+    console.log('');
+  }
+  
   console.log(chalk.cyan('Upgrade to on-chain (optional):'));
   console.log(chalk.gray('  • Fund wallet with 0.005 SOL'));
-  console.log(chalk.gray('  • Run: npm run anchor'));
-  console.log(chalk.gray('  • Get verified badge: npm run verify (0.01 SOL)'));
+  console.log(chalk.gray('  • Run: npx said-sdk register'));
   console.log('');
   
   console.log(chalk.gray('Docs: https://www.saidprotocol.com/docs.html'));
@@ -270,6 +297,30 @@ export async function runWizard(projectName?: string, options: WizardOptions = {
       message: 'What can your agent do? (select with space):',
       choices: SKILL_CHOICES,
       default: (ans: any) => ans.template === 'crypto' ? ['trading'] : []
+    },
+    {
+      type: 'password',
+      name: 'anthropicKey',
+      message: 'Anthropic API key (get one at console.anthropic.com):',
+      mask: '*',
+      validate: (input: string) => {
+        if (!input) return true; // Optional
+        if (!input.startsWith('sk-ant-')) {
+          return 'API key should start with sk-ant-';
+        }
+        return true;
+      }
+    },
+    {
+      type: 'input',
+      name: 'telegramToken',
+      message: 'Telegram bot token (optional - get from @BotFather):'
+    },
+    {
+      type: 'input',
+      name: 'telegramUserId',
+      message: 'Your Telegram user ID (optional - get from @userinfobot):',
+      when: (ans: any) => !!ans.telegramToken
     }
   ]);
 
