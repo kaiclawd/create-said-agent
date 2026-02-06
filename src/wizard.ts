@@ -178,6 +178,8 @@ async function runScaffold(
     const { Keypair } = await import('@solana/web3.js');
     const keypair = Keypair.fromSecretKey(Uint8Array.from(walletData));
     console.log(chalk.cyan('📍 Your wallet: ') + chalk.white(keypair.publicKey.toString()));
+    console.log(chalk.yellow('🔑 Private key: ') + chalk.gray(`saved in ${answers.projectName}/wallet.json`));
+    console.log(chalk.red('⚠️  BACKUP wallet.json! Lose it = lose your identity'));
   } catch {}
   
   // Show profile link
