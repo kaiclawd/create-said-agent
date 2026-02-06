@@ -206,11 +206,8 @@ async function runScaffold(
   } else {
     // OpenClaw template
     console.log(chalk.white('  npx clawdbot configure'));
-    console.log(chalk.gray('    ↳ Add your Anthropic/OpenAI API key'));
-    console.log(chalk.white('  npx clawdbot gateway --allow-unconfigured'));
-    console.log('');
-    console.log(chalk.gray('  Then in another terminal:'));
-    console.log(chalk.white('  npx clawdbot tui'));
+    console.log(chalk.gray('    ↳ Add API keys, connect Telegram/WhatsApp, etc.'));
+    console.log(chalk.white('  npx clawdbot gateway'));
   }
   console.log('');
   
