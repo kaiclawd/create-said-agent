@@ -28,7 +28,17 @@ interface WizardAnswers {
   telegramUserId?: string;
 }
 
-const SKILL_CHOICES = [
+// Skills available for nanobot (what's actually built)
+const NANOBOT_SKILLS = [
+  { name: 'Solana & Crypto — balances, verify agents, trust scores', value: 'solana' },
+  { name: 'Research & Analysis — web search, data gathering', value: 'research' },
+  { name: 'Code & Development — generate, debug, file ops', value: 'coding' },
+  { name: 'Automation — scheduling, cron jobs', value: 'automation' },
+  { name: 'Messaging — Telegram, WhatsApp', value: 'messaging' },
+];
+
+// Skills available for openclaw (full Clawdbot capabilities)
+const OPENCLAW_SKILLS = [
   { name: 'Trading & DeFi — swaps, prices, portfolio', value: 'trading' },
   { name: 'Social Media — Twitter, Discord, Telegram', value: 'social' },
   { name: 'Research & Analysis — search, data, market intel', value: 'research' },
@@ -37,7 +47,7 @@ const SKILL_CHOICES = [
   { name: 'Code & Development — generate, debug, deploy', value: 'coding' },
   { name: 'Data Processing — scraping, ETL, formatting', value: 'data' },
   { name: 'Automation — scheduling, workflows', value: 'automation' },
-  { name: 'Gaming & NFTs — game bots, metaverse', value: 'gaming' },
+  { name: 'Solana & Crypto — balances, transfers, DeFi', value: 'solana' },
   { name: 'Payments & Finance — invoicing, accounting', value: 'finance' },
 ];
 
@@ -294,9 +304,11 @@ export async function runWizard(projectName?: string, options: WizardOptions = {
     {
       type: 'checkbox',
       name: 'skills',
-      message: 'What can your agent do? (select with space):',
-      choices: SKILL_CHOICES,
-      default: (ans: any) => ans.template === 'crypto' ? ['trading'] : []
+      message: (ans: any) => ans.template === 'nanobot' 
+        ? 'What can your agent do? (select with space):' 
+        : 'What skills should your agent have? (select with space):',
+      choices: (ans: any) => ans.template === 'nanobot' ? NANOBOT_SKILLS : OPENCLAW_SKILLS,
+      default: (ans: any) => ans.template === 'nanobot' ? ['solana', 'research'] : []
     },
     {
       type: 'password',
