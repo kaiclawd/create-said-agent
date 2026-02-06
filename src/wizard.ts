@@ -205,6 +205,7 @@ async function runScaffold(
     }
   } else {
     // OpenClaw template
+    console.log(chalk.yellow('  ⚠️  Requires Node.js 22+ (check: node --version)'));
     console.log(chalk.white('  npx clawdbot configure'));
     console.log(chalk.gray('    ↳ Add API keys, connect Telegram/WhatsApp, etc.'));
     console.log(chalk.white('  npx clawdbot gateway'));
