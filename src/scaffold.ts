@@ -874,6 +874,8 @@ function scaffoldOpenclaw(options: ScaffoldOptions): void {
   
   // Create directories
   fs.ensureDirSync(path.join(projectPath, 'skills', 'solana'));
+  fs.ensureDirSync(path.join(projectPath, 'skills', 'trading'));
+  fs.ensureDirSync(path.join(projectPath, 'skills', 'said'));
   
   // package.json
   const packageJson = {
@@ -923,9 +925,61 @@ channels:
     token: \${TELEGRAM_BOT_TOKEN}
 
 skills:
+  - ./skills/said
   - ./skills/solana
+  - ./skills/trading
 `;
   fs.writeFileSync(path.join(projectPath, 'config.yaml'), configYaml);
+  
+  // SAID skill
+  const saidSkillMd = `---
+name: said-protocol
+description: SAID Protocol - on-chain identity for AI agents. Verify agents, check trust scores, lookup profiles. Use before transacting with unknown agents.
+---
+
+# SAID Protocol Skill
+
+Verify agent identities before you transact.
+
+## Verify an Agent
+curl "https://api.saidprotocol.com/api/agents/WALLET_ADDRESS"
+
+## Get Trust Score
+curl "https://api.saidprotocol.com/api/trust/WALLET_ADDRESS"
+
+## Your Identity
+Check said.json for your wallet, PDA, and profile link.
+
+## Links
+- Profile: https://www.saidprotocol.com/agent.html?wallet=YOUR_WALLET
+- API: https://api.saidprotocol.com
+`;
+  fs.writeFileSync(path.join(projectPath, 'skills', 'said', 'SKILL.md'), saidSkillMd);
+  
+  // Trading skill
+  const tradingSkillMd = `---
+name: trading-defi
+description: Trading and DeFi tools for Solana. Get token prices, swap quotes via Jupiter. Use for price checks and trading operations.
+---
+
+# Trading & DeFi Skill
+
+Solana DeFi tools via Jupiter aggregator.
+
+## Get Token Price
+curl "https://api.jup.ag/price/v2?ids=SOL,BONK,JUP"
+
+## Get Swap Quote
+curl "https://quote-api.jup.ag/v6/quote?inputMint=So11111111111111111111111111111111111111112&outputMint=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v&amount=1000000000"
+
+## Common Tokens
+| Token | Mint |
+|-------|------|
+| SOL | So11111111111111111111111111111111111111112 |
+| USDC | EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v |
+| BONK | DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263 |
+`;
+  fs.writeFileSync(path.join(projectPath, 'skills', 'trading', 'SKILL.md'), tradingSkillMd);
   
   // Solana skill SKILL.md
   const skillMd = `---

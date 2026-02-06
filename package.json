@@ -1,6 +1,6 @@
 {
   "name": "create-said-agent",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "type": "module",
   "description": "Scaffold, register, and run a SAID-verified AI agent in one command",
   "main": "dist/index.js",
