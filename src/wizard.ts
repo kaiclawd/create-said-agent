@@ -187,30 +187,32 @@ async function runScaffold(
   console.log(chalk.cyan('📁 Location: ') + chalk.gray(projectPath));
   console.log('');
   
-  // Smart next steps based on what's configured
+  // Smart next steps based on template
   console.log(chalk.cyan('To run your agent:'));
   console.log('');
   console.log(chalk.white(`  cd ${answers.projectName}`));
   
-  if (!answers.anthropicKey) {
-    console.log(chalk.yellow('  # Add your API key first:'));
-    console.log(chalk.gray('  # Edit .env and add ANTHROPIC_API_KEY=sk-ant-...'));
-  }
-  
   if (answers.template === 'nanobot') {
+    if (!answers.anthropicKey) {
+      console.log(chalk.yellow('  # Add your API key to .env first'));
+    }
     console.log(chalk.white('  pip install git+https://github.com/kaiclawd/said-nanobot.git'));
     console.log(chalk.white('  mkdir -p ~/.nanobot && cp config.json ~/.nanobot/'));
     console.log(chalk.white('  nanobot agent -m "Hello!"'));
+    if (answers.telegramToken) {
+      console.log('');
+      console.log(chalk.green('✓ Telegram configured! Run: nanobot gateway'));
+    }
   } else {
-    console.log(chalk.white('  npm install'));
-    console.log(chalk.white('  npm start'));
+    // OpenClaw template
+    console.log(chalk.white('  npx clawdbot configure'));
+    console.log(chalk.gray('    ↳ Add your Anthropic/OpenAI API key'));
+    console.log(chalk.white('  npx clawdbot gateway --allow-unconfigured'));
+    console.log('');
+    console.log(chalk.gray('  Then in another terminal:'));
+    console.log(chalk.white('  npx clawdbot tui'));
   }
   console.log('');
-  
-  if (answers.telegramToken) {
-    console.log(chalk.green('✓ Telegram configured! Run: nanobot gateway'));
-    console.log('');
-  }
   
   console.log(chalk.cyan('Upgrade to on-chain (optional):'));
   console.log(chalk.gray('  • Fund wallet with 0.005 SOL'));
@@ -317,6 +319,7 @@ export async function runWizard(projectName?: string, options: WizardOptions = {
       name: 'anthropicKey',
       message: 'Anthropic API key (get one at console.anthropic.com):',
       mask: '*',
+      when: (ans: any) => ans.template === 'nanobot', // Only ask for nanobot
       validate: (input: string) => {
         if (!input) return true; // Optional
         if (!input.startsWith('sk-ant-')) {
@@ -328,13 +331,14 @@ export async function runWizard(projectName?: string, options: WizardOptions = {
     {
       type: 'input',
       name: 'telegramToken',
-      message: 'Telegram bot token (optional - get from @BotFather):'
+      message: 'Telegram bot token (optional - get from @BotFather):',
+      when: (ans: any) => ans.template === 'nanobot' // Only ask for nanobot
     },
     {
       type: 'input',
       name: 'telegramUserId',
       message: 'Your Telegram user ID (optional - get from @userinfobot):',
-      when: (ans: any) => !!ans.telegramToken
+      when: (ans: any) => ans.template === 'nanobot' && !!ans.telegramToken
     }
   ]);
 
