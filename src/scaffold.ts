@@ -815,7 +815,7 @@ An AI agent powered by [nanobot](https://github.com/HKUDS/nanobot) with verified
 ### 1. Install nanobot
 
 \`\`\`bash
-pip install nanobot-ai
+pip install git+https://github.com/kaiclawd/said-nanobot.git
 \`\`\`
 
 ### 2. Configure
@@ -861,7 +861,7 @@ npx said-sdk register -k wallet.json -n "${agentName}"
 ## Links
 
 - [SAID Protocol](https://www.saidprotocol.com)
-- [nanobot Docs](https://github.com/HKUDS/nanobot)
+- [said-nanobot](https://github.com/kaiclawd/said-nanobot) (nanobot fork with Solana tools)
 `;
   fs.writeFileSync(path.join(projectPath, 'README.md'), readme);
 }

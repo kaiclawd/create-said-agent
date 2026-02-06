@@ -186,7 +186,7 @@ async function runScaffold(
   }
   
   if (answers.template === 'nanobot') {
-    console.log(chalk.white('  pip install nanobot-ai'));
+    console.log(chalk.white('  pip install git+https://github.com/kaiclawd/said-nanobot.git'));
     console.log(chalk.white('  mkdir -p ~/.nanobot && cp config.json ~/.nanobot/'));
     console.log(chalk.white('  nanobot agent -m "Hello!"'));
   } else {
