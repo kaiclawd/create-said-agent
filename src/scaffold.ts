@@ -897,17 +897,32 @@ function scaffoldOpenclaw(options: ScaffoldOptions): void {
 
 ${description}
 
-## Setup
+## Who You Are
 
-This agent runs on Clawdbot (OpenClaw).
+You are ${agentName}, an AI agent with a verified identity on Solana via SAID Protocol.
 
-1. Install: \`npm install\`
-2. Configure: Copy config below to \`~/.clawdbot/config.yaml\`
-3. Run: \`npm start\`
+## Your Wallet
 
-## SAID Identity
+Your Solana wallet is in \`wallet.json\`. Use it to:
+- Send/receive SOL
+- Sign messages to prove your identity
+- Interact with DeFi protocols
 
-Check \`said.json\` for your on-chain identity.
+Check \`said.json\` for your on-chain identity details.
+
+## Your Skills
+
+Check \`./skills/\` for available capabilities:
+- **said/** - Verify other agents' identities
+- **solana/** - Wallet operations
+- **trading/** - Jupiter API for swaps/prices
+
+## Important Files
+
+- \`wallet.json\` - Your private key (NEVER share this)
+- \`said.json\` - Your SAID identity
+- \`TOOLS.md\` - Tool reference
+- \`clawdbot.json\` - Gateway config
 `;
   fs.writeFileSync(path.join(projectPath, 'AGENTS.md'), agentsMd);
   
@@ -1070,6 +1085,40 @@ SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
 TELEGRAM_BOT_TOKEN=
 SOLANA_RPC_URL=
 `);
+
+  // TOOLS.md - so the agent knows about its wallet
+  const toolsMd = `# TOOLS.md - Agent Tools
+
+## Solana Wallet
+- **Keypair file:** ./wallet.json
+- **Network:** mainnet-beta
+- **Check balance:** Use the solana skill or run: curl "https://api.mainnet-beta.solana.com" -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","id":1,"method":"getBalance","params":["YOUR_WALLET_ADDRESS"]}'
+
+## SAID Identity
+- **Config:** ./said.json
+- **Status:** Check said.json for PDA and verification status
+- **Profile:** https://www.saidprotocol.com/agent.html?wallet=YOUR_WALLET
+
+## Skills
+Skills are in ./skills/ directory. Each has a SKILL.md with usage instructions.
+`;
+  fs.writeFileSync(path.join(projectPath, 'TOOLS.md'), toolsMd);
+
+  // clawdbot.json - workspace config so Clawdbot uses this folder
+  const clawdbotConfig = {
+    "$schema": "https://docs.clawd.bot/schemas/config.json",
+    "gateway": {
+      "mode": "local"
+    },
+    "workspace": {
+      "path": "."
+    },
+    "llm": {
+      "provider": "anthropic",
+      "model": "claude-sonnet-4-20250514"
+    }
+  };
+  fs.writeJsonSync(path.join(projectPath, 'clawdbot.json'), clawdbotConfig, { spaces: 2 });
   
   // .gitignore
   fs.writeFileSync(path.join(projectPath, '.gitignore'), `wallet.json
