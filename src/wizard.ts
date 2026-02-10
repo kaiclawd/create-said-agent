@@ -17,7 +17,7 @@ interface WizardOptions {
 
 interface WizardAnswers {
   projectName: string;
-  template: 'nanobot' | 'openclaw';
+  template: 'nanobot' | 'openclaw' | 'eliza';
   agentName: string;
   description: string;
   twitter?: string;
@@ -203,6 +203,14 @@ async function runScaffold(
       console.log('');
       console.log(chalk.green('✓ Telegram configured! Run: nanobot gateway'));
     }
+  } else if (answers.template === 'eliza') {
+    // Eliza OS template
+    console.log(chalk.white('  npm install'));
+    console.log(chalk.yellow('  # Add your API keys to .env'));
+    console.log(chalk.white('  npm start'));
+    console.log('');
+    console.log(chalk.gray('  Customize your agent in characters/agent.json'));
+    console.log(chalk.gray('  SAID plugin included for identity verification'));
   } else {
     // OpenClaw template
     console.log(chalk.yellow('  ⚠️  Requires Node.js 22+ (check: node --version)'));
@@ -266,6 +274,10 @@ export async function runWizard(projectName?: string, options: WizardOptions = {
         { 
           name: 'nanobot - Lightweight agent, runs anywhere (recommended)', 
           value: 'nanobot' 
+        },
+        { 
+          name: 'eliza - Eliza OS multi-agent framework', 
+          value: 'eliza' 
         },
         { 
           name: 'openclaw - Full Clawdbot framework, needs VPS/Mac Mini', 

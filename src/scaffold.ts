@@ -6,7 +6,7 @@ import chalk from 'chalk';
 interface ScaffoldOptions {
   projectName: string;
   projectPath: string;
-  template: 'nanobot' | 'openclaw';
+  template: 'nanobot' | 'openclaw' | 'eliza';
   agentName: string;
   description: string;
   twitter?: string;
@@ -1167,6 +1167,277 @@ Copy \`config.yaml\` to \`~/.clawdbot/config.yaml\` and configure.
 }
 
 /**
+ * Scaffold the Eliza OS template
+ */
+function scaffoldEliza(options: ScaffoldOptions, walletAddress: string): void {
+  const { projectPath, projectName, agentName, description, twitter, website } = options;
+  
+  // package.json
+  const packageJson = {
+    name: projectName,
+    version: '0.1.0',
+    type: 'module',
+    scripts: {
+      start: 'npx elizaos start',
+      dev: 'npx elizaos start --character characters/agent.json',
+      build: 'npx elizaos build'
+    },
+    dependencies: {
+      '@elizaos/core': '^0.25.0',
+      '@elizaos/client-discord': '^0.25.0',
+      '@elizaos/client-telegram': '^0.25.0',
+      '@elizaos/client-twitter': '^0.25.0',
+      '@elizaos/plugin-solana': '^0.25.0',
+      '@solana/web3.js': '^1.98.0',
+      'said-sdk': '^0.1.0',
+      'dotenv': '^16.4.5'
+    }
+  };
+  fs.writeJsonSync(path.join(projectPath, 'package.json'), packageJson, { spaces: 2 });
+  
+  // Create directories
+  fs.ensureDirSync(path.join(projectPath, 'characters'));
+  fs.ensureDirSync(path.join(projectPath, 'plugins'));
+  
+  // Character file with SAID identity
+  const characterJson = {
+    name: agentName,
+    description: description,
+    modelProvider: 'anthropic',
+    clients: ['discord', 'telegram'],
+    settings: {
+      secrets: {
+        ANTHROPIC_API_KEY: '${ANTHROPIC_API_KEY}',
+        DISCORD_TOKEN: '${DISCORD_TOKEN}',
+        TELEGRAM_BOT_TOKEN: '${TELEGRAM_BOT_TOKEN}'
+      }
+    },
+    plugins: ['@elizaos/plugin-solana', './plugins/said-plugin.js'],
+    bio: [
+      description,
+      `On-chain identity verified via SAID Protocol on Solana.`,
+      `Wallet: ${walletAddress}`
+    ],
+    lore: [
+      `${agentName} is an AI agent with a verified on-chain identity.`,
+      `Their identity can be verified at https://www.saidprotocol.com/agent/${walletAddress}`,
+      'They believe in transparency and trust through cryptographic verification.'
+    ],
+    knowledge: [
+      'SAID Protocol provides on-chain identity for AI agents on Solana.',
+      'Verification costs 0.01 SOL and proves the agent is who they claim to be.',
+      'Other agents can verify my identity by checking my SAID PDA on-chain.'
+    ],
+    messageExamples: [
+      [
+        { user: '{{user1}}', content: { text: 'Can I trust you?' } },
+        { user: agentName, content: { text: `You can verify my identity on-chain via SAID Protocol. My wallet is ${walletAddress.slice(0, 8)}... - check my profile at saidprotocol.com` } }
+      ],
+      [
+        { user: '{{user1}}', content: { text: 'What is your wallet address?' } },
+        { user: agentName, content: { text: `My Solana wallet is ${walletAddress}. You can verify my SAID identity on-chain.` } }
+      ]
+    ],
+    style: {
+      all: ['Be helpful and concise', 'Reference your verified identity when relevant', 'Be authentic'],
+      chat: ['Respond naturally', 'Use your SAID identity for trust'],
+      post: ['Share insights', 'Engage authentically']
+    },
+    adjectives: ['verified', 'trustworthy', 'helpful', 'knowledgeable'],
+    topics: ['AI agents', 'Solana', 'identity', 'trust', 'crypto']
+  };
+  
+  // Add twitter if provided
+  if (twitter) {
+    (characterJson as any).twitterProfile = {
+      username: twitter.replace('@', ''),
+      id: ''
+    };
+  }
+  
+  fs.writeJsonSync(path.join(projectPath, 'characters', 'agent.json'), characterJson, { spaces: 2 });
+  
+  // SAID Plugin for Eliza
+  const saidPlugin = `import { Plugin, Action, IAgentRuntime, Memory, State, HandlerCallback } from '@elizaos/core';
+import fs from 'fs';
+import path from 'path';
+
+// Load SAID identity
+const saidPath = path.join(process.cwd(), 'said.json');
+const saidIdentity = fs.existsSync(saidPath) ? JSON.parse(fs.readFileSync(saidPath, 'utf8')) : null;
+
+const verifyAgentAction: Action = {
+  name: 'VERIFY_AGENT',
+  description: 'Verify another agent\\'s SAID identity on Solana',
+  similes: ['check agent', 'verify identity', 'is this agent real'],
+  examples: [
+    [
+      { user: '{{user1}}', content: { text: 'Can you verify agent 7xKp...?' } },
+      { user: '{{agentName}}', content: { text: 'Let me check their SAID identity...', action: 'VERIFY_AGENT' } }
+    ]
+  ],
+  validate: async (runtime: IAgentRuntime, message: Memory) => {
+    const text = message.content.text.toLowerCase();
+    return text.includes('verify') || text.includes('check') || text.includes('trust');
+  },
+  handler: async (runtime: IAgentRuntime, message: Memory, state: State, options: any, callback: HandlerCallback) => {
+    // Extract wallet address from message
+    const walletMatch = message.content.text.match(/[1-9A-HJ-NP-Za-km-z]{32,44}/);
+    if (!walletMatch) {
+      callback({ text: 'Please provide a Solana wallet address to verify.' });
+      return;
+    }
+    
+    const wallet = walletMatch[0];
+    
+    try {
+      const response = await fetch(\`https://api.saidprotocol.com/api/agents/\${wallet}\`);
+      if (!response.ok) {
+        callback({ text: \`Agent \${wallet.slice(0, 8)}... is NOT registered on SAID Protocol. Proceed with caution.\` });
+        return;
+      }
+      
+      const agent = await response.json();
+      const status = agent.isVerified ? '✅ VERIFIED' : '⚠️ Registered but not verified';
+      callback({ 
+        text: \`Agent Identity Check:\\n\\nName: \${agent.name}\\nStatus: \${status}\\nWallet: \${wallet}\\nProfile: https://www.saidprotocol.com/agent/\${wallet}\`
+      });
+    } catch (error) {
+      callback({ text: 'Failed to verify agent identity. Please try again.' });
+    }
+  }
+};
+
+const getMyIdentityAction: Action = {
+  name: 'MY_IDENTITY',
+  description: 'Share my SAID identity information',
+  similes: ['who are you', 'your identity', 'your wallet', 'prove yourself'],
+  examples: [
+    [
+      { user: '{{user1}}', content: { text: 'Who are you?' } },
+      { user: '{{agentName}}', content: { text: 'I\\'m a SAID-verified agent...', action: 'MY_IDENTITY' } }
+    ]
+  ],
+  validate: async (runtime: IAgentRuntime, message: Memory) => {
+    const text = message.content.text.toLowerCase();
+    return text.includes('who are you') || text.includes('your identity') || text.includes('your wallet');
+  },
+  handler: async (runtime: IAgentRuntime, message: Memory, state: State, options: any, callback: HandlerCallback) => {
+    if (!saidIdentity) {
+      callback({ text: 'My SAID identity is not yet configured. Check said.json.' });
+      return;
+    }
+    
+    callback({
+      text: \`My SAID Identity:\\n\\nName: \${saidIdentity.name}\\nWallet: \${saidIdentity.wallet}\\nStatus: \${saidIdentity.status || 'PENDING'}\\nProfile: \${saidIdentity.profile}\`
+    });
+  }
+};
+
+export const saidPlugin: Plugin = {
+  name: 'said-protocol',
+  description: 'SAID Protocol identity verification for Eliza agents',
+  actions: [verifyAgentAction, getMyIdentityAction],
+  evaluators: [],
+  providers: []
+};
+
+export default saidPlugin;
+`;
+  fs.writeFileSync(path.join(projectPath, 'plugins', 'said-plugin.js'), saidPlugin);
+  
+  // .env.example
+  const envExample = `# LLM Provider
+ANTHROPIC_API_KEY=sk-ant-...
+
+# Discord (optional)
+DISCORD_TOKEN=
+DISCORD_APPLICATION_ID=
+
+# Telegram (optional)
+TELEGRAM_BOT_TOKEN=
+
+# Twitter (optional)
+TWITTER_USERNAME=
+TWITTER_PASSWORD=
+TWITTER_EMAIL=
+
+# Solana
+SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
+`;
+  fs.writeFileSync(path.join(projectPath, '.env.example'), envExample);
+  fs.writeFileSync(path.join(projectPath, '.env'), envExample);
+  
+  // .gitignore
+  fs.writeFileSync(path.join(projectPath, '.gitignore'), `node_modules/
+.env
+wallet.json
+said.json
+dist/
+`);
+  
+  // README
+  const readme = `# ${agentName}
+
+${description}
+
+An AI agent built with [Eliza OS](https://elizaos.github.io/eliza/) and verified on [SAID Protocol](https://www.saidprotocol.com).
+
+## Quick Start
+
+### 1. Install dependencies
+\`\`\`bash
+npm install
+\`\`\`
+
+### 2. Configure environment
+\`\`\`bash
+cp .env.example .env
+# Add your API keys to .env
+\`\`\`
+
+### 3. Run the agent
+\`\`\`bash
+npm start
+\`\`\`
+
+## SAID Identity
+
+Your agent has a Solana wallet for on-chain identity:
+- **Wallet:** \`${walletAddress}\`
+- **Private key:** \`wallet.json\` (keep secret!)
+- **Identity:** \`said.json\`
+
+### Go On-Chain
+
+1. Fund your wallet with ~0.01 SOL
+2. Register: \`npx said register -k wallet.json\`
+3. Verify: \`npx said verify -k wallet.json\`
+
+## Character Customization
+
+Edit \`characters/agent.json\` to customize:
+- Bio and lore
+- Message examples
+- Style and adjectives
+- Enabled clients (Discord, Telegram, Twitter)
+
+## SAID Plugin
+
+The included \`plugins/said-plugin.js\` provides:
+- \`VERIFY_AGENT\` - Check another agent's SAID identity
+- \`MY_IDENTITY\` - Share your verified identity
+
+## Links
+
+- [Eliza OS Docs](https://elizaos.github.io/eliza/)
+- [SAID Protocol](https://www.saidprotocol.com)
+- [Your Profile](https://www.saidprotocol.com/agent/${walletAddress})
+`;
+  fs.writeFileSync(path.join(projectPath, 'README.md'), readme);
+}
+
+/**
  * Main scaffold function
  */
 export async function scaffold(options: ScaffoldOptions): Promise<void> {
@@ -1178,7 +1449,8 @@ export async function scaffold(options: ScaffoldOptions): Promise<void> {
   // Generate wallet
   console.log(chalk.blue('Generating wallet...'));
   const keypair = generateKeypair(projectPath);
-  console.log(chalk.gray(`  Address: ${keypair.publicKey.toString()}`));
+  const walletAddress = keypair.publicKey.toString();
+  console.log(chalk.gray(`  Address: ${walletAddress}`));
   
   // Scaffold based on template
   console.log(chalk.blue(`Scaffolding ${template} template...`));
@@ -1187,6 +1459,8 @@ export async function scaffold(options: ScaffoldOptions): Promise<void> {
     scaffoldNanobot(options);
   } else if (template === 'openclaw') {
     scaffoldOpenclaw(options);
+  } else if (template === 'eliza') {
+    scaffoldEliza(options, walletAddress);
   } else {
     scaffoldNanobot(options); // Default to nanobot
   }
