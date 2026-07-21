@@ -51,9 +51,9 @@ function scaffoldLight(options: ScaffoldOptions): void {
       register: 'node scripts/register.js'
     },
     dependencies: {
-      '@anthropic-ai/sdk': '^0.30.0',
+      '@anthropic-ai/sdk': '^0.39.0',
       '@solana/web3.js': '^1.98.0',
-      'said-sdk': '^0.1.0',
+      'said-sdk': '^0.7.0',
       'dotenv': '^16.4.5'
     }
   };
@@ -261,10 +261,10 @@ function scaffoldCrypto(options: ScaffoldOptions): void {
       register: 'node scripts/register.js'
     },
     dependencies: {
-      '@anthropic-ai/sdk': '^0.30.0',
+      '@anthropic-ai/sdk': '^0.39.0',
       '@solana/web3.js': '^1.98.0',
       '@solana/spl-token': '^0.4.9',
-      'said-sdk': '^0.1.0',
+      'said-sdk': '^0.7.0',
       'dotenv': '^16.4.5',
       'bs58': '^6.0.0'
     }
@@ -1183,13 +1183,13 @@ function scaffoldEliza(options: ScaffoldOptions, walletAddress: string): void {
       build: 'npx elizaos build'
     },
     dependencies: {
-      '@elizaos/core': '^0.25.0',
-      '@elizaos/client-discord': '^0.25.0',
-      '@elizaos/client-telegram': '^0.25.0',
-      '@elizaos/client-twitter': '^0.25.0',
-      '@elizaos/plugin-solana': '^0.25.0',
+      '@elizaos/core': '^1.0.0',
+      '@elizaos/client-discord': '^1.0.0',
+      '@elizaos/client-telegram': '^1.0.0',
+      '@elizaos/client-twitter': '^1.0.0',
+      '@elizaos/plugin-solana': '^1.0.0',
       '@solana/web3.js': '^1.98.0',
-      'said-sdk': '^0.1.0',
+      'said-sdk': '^0.7.0',
       'dotenv': '^16.4.5'
     }
   };

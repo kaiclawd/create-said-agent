@@ -24,6 +24,7 @@ console.log(chalk.cyan(`
 
 import { loadKeypair, registerOnAPI, registerOnChain, getVerified, getStatus } from './onchain.js';
 import { PublicKey } from '@solana/web3.js';
+import { getScore, submitFeedback, discoverAgents, getLeaderboard, getStats } from './api.js';
 
 program
   .name('create-said-agent')
@@ -33,7 +34,7 @@ program
 // Default command: scaffold wizard
 program
   .argument('[project-name]', 'Name of the project directory')
-  .option('-t, --template <template>', 'Template to use (light | crypto)', 'light')
+  .option('-t, --template <template>', 'Template to use (nanobot | eliza | openclaw)', 'nanobot')
   .option('--skip-install', 'Skip npm install')
   .option('--skip-register', 'Skip SAID registration')
   .option('-y, --yes', 'Skip prompts and use defaults')
@@ -132,6 +133,53 @@ program
       console.error(chalk.red(`\n❌ Status check failed: ${msg}\n`));
       process.exit(1);
     }
+  });
+
+// score subcommand
+program
+  .command('score')
+  .description('Check an agent\'s SAID trust score')
+  .requiredOption('--wallet <address>', 'Solana wallet address')
+  .action(async (opts) => {
+    await getScore(opts.wallet);
+  });
+
+// feedback subcommand
+program
+  .command('feedback')
+  .description('Submit feedback for an agent')
+  .requiredOption('--wallet <address>', 'Target agent\'s wallet address')
+  .requiredOption('--rating <1-5>', 'Rating (1-5 stars)')
+  .option('--comment <text>', 'Feedback comment')
+  .option('--from <wallet>', 'Your wallet address (optional)')
+  .action(async (opts) => {
+    await submitFeedback(opts.wallet, parseInt(opts.rating, 10), opts.comment || '', opts.from);
+  });
+
+// discover subcommand
+program
+  .command('discover')
+  .description('Browse the SAID agent directory')
+  .option('--limit <n>', 'Number of agents to show', '20')
+  .action(async (opts) => {
+    await discoverAgents(parseInt(opts.limit, 10));
+  });
+
+// leaderboard subcommand
+program
+  .command('leaderboard')
+  .description('Show top trusted SAID agents')
+  .option('--limit <n>', 'Number of entries', '10')
+  .action(async (opts) => {
+    await getLeaderboard(parseInt(opts.limit, 10));
+  });
+
+// stats subcommand
+program
+  .command('stats')
+  .description('Show SAID Protocol network statistics')
+  .action(async () => {
+    await getStats();
   });
 
 program.parse();
