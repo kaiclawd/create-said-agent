@@ -24,7 +24,7 @@ console.log(chalk.cyan(`
 
 import { loadKeypair, registerOnAPI, registerOnChain, getVerified, getStatus } from './onchain.js';
 import { PublicKey } from '@solana/web3.js';
-import { getScore, submitFeedback, discoverAgents, getLeaderboard, getStats } from './api.js';
+import { getScore, submitFeedback, discoverAgents, getLeaderboard, getStats, getRiskAssessment, getCreditScore, assessAgent, getStakingInfo } from './api.js';
 
 program
   .name('create-said-agent')
@@ -180,6 +180,53 @@ program
   .description('Show SAID Protocol network statistics')
   .action(async () => {
     await getStats();
+  });
+
+// risk subcommand — assess transaction risk for an agent
+program
+  .command('risk')
+  .description('Assess transaction risk for an agent (6-tier model with escrow recommendations)')
+  .requiredOption('--wallet <address>', 'Solana wallet address')
+  .option('--amount <usd>', 'Transaction amount in USDC (optional, for tailored advice)')
+  .action(async (opts) => {
+    const amount = opts.amount ? parseFloat(opts.amount) : undefined;
+    await getRiskAssessment(opts.wallet, amount);
+  });
+
+// credit subcommand — SACRS credit score (FICO-compatible)
+program
+  .command('credit')
+  .description('Get SACRS credit score for an agent (300-850 FICO-compatible)')
+  .requiredOption('--wallet <address>', 'Solana wallet address')
+  .action(async (opts) => {
+    await getCreditScore(opts.wallet);
+  });
+
+// assess subcommand — policy-based trust decision
+program
+  .command('assess')
+  .description('Evaluate an agent against a trust policy (allow/deny/review)')
+  .requiredOption('--wallet <address>', 'Solana wallet address')
+  .option('--policy <preset>', 'Policy preset: strict | balanced | permissive', 'balanced')
+  .option('--min-score <n>', 'Minimum trust score (0-100)', '0')
+  .option('--min-stake <sol>', 'Minimum stake in SOL', '0')
+  .option('--require-verified', 'Require verified status')
+  .action(async (opts) => {
+    await assessAgent(opts.wallet, {
+      preset: opts.policy,
+      minScore: parseInt(opts.minScore, 10) || undefined,
+      minStakeSOL: parseFloat(opts.minStake) || undefined,
+      requireVerified: opts.requireVerified || undefined,
+    });
+  });
+
+// stake subcommand — staking and enforcement info
+program
+  .command('stake')
+  .description('View staking and slashing/enforcement info for an agent')
+  .requiredOption('--wallet <address>', 'Solana wallet address')
+  .action(async (opts) => {
+    await getStakingInfo(opts.wallet);
   });
 
 program.parse();

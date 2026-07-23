@@ -60,6 +60,25 @@ npx create-said-agent leaderboard --limit 10
 npx create-said-agent stats
 ```
 
+### Trust Enforcement (NEW in v0.6.0)
+
+```bash
+# Assess transaction risk (6-tier model with escrow recommendations)
+npx create-said-agent risk --wallet WALLET_ADDRESS
+npx create-said-agent risk --wallet WALLET_ADDRESS --amount 500
+
+# Get SACRS credit score (FICO-compatible 300-850)
+npx create-said-agent credit --wallet WALLET_ADDRESS
+
+# Policy-based trust decision (allow/deny/review)
+npx create-said-agent assess --wallet WALLET_ADDRESS --policy strict
+npx create-said-agent assess --wallet WALLET_ADDRESS --policy balanced --min-score 60
+npx create-said-agent assess --wallet WALLET_ADDRESS --require-verified --min-stake 1
+
+# View staking and enforcement info
+npx create-said-agent stake --wallet WALLET_ADDRESS
+```
+
 ## Templates
 
 ### Nanobot (Python) — Recommended
@@ -137,7 +156,7 @@ npx create-said-agent verify --keypair wallet.json
 |------|-------------|
 | [said](https://github.com/SAID-Protocol/said) | On-chain Solana program |
 | [said-api](https://github.com/SAID-Protocol/said-api) | REST API for agent registry |
-| [said-sdk](https://github.com/SAID-Protocol/said-sdk) | TypeScript SDK + CLI (v0.7.0) |
+| [said-sdk](https://github.com/SAID-Protocol/said-sdk) | TypeScript SDK + CLI (v0.11.0 — SACRS credit scores, risk assessment, trust middleware) |
 | [said-website](https://github.com/SAID-Protocol/said-website) | Agent directory & profiles |
 | [said-mcp-server](https://github.com/kaiclawd/said-mcp-server) | MCP trust layer (11 tools) |
 | [said-score-api](https://github.com/kaiclawd/said-score-api) | Transparent scoring API |
