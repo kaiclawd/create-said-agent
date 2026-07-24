@@ -68,7 +68,8 @@ export async function getScore(wallet: string): Promise<void> {
     }
     
     const data = await res.json() as any;
-    const score = data.score ?? data.trust_score ?? 0;
+    // API returns compositeScore (0-1) or score (0-100) — normalize to 0-100
+    const score = data.score ?? data.trust_score ?? Math.round((data.compositeScore ?? 0) * 100) ?? 0;
     const level = score >= 80 ? '🟢 HIGH' : score >= 50 ? '🟡 MEDIUM' : score > 0 ? '🟠 LOW' : '⚪ NONE';
     
     console.log(chalk.white(`  Wallet:  ${wallet}`));
@@ -83,18 +84,12 @@ export async function getScore(wallet: string): Promise<void> {
       if (agent.isVerified) console.log(chalk.green('  ✅ Verified on-chain'));
     }
     
-    // Try transparent breakdown
-    const breakdownRes = await fetch(`${API_BASE}/v1/breakdown/${wallet}`);
-    if (breakdownRes.ok) {
-      const breakdown = await breakdownRes.json() as any;
-      if (breakdown.breakdown && breakdown.breakdown.length > 0) {
-        console.log(chalk.cyan('\n  Score Breakdown:'));
-        for (const item of breakdown.breakdown) {
-          console.log(chalk.gray(`    ${item.category}: +${item.points} (${item.source})`));
-        }
-      }
+    // Trust tier from API if available
+    if (data.trustTier || data.tier) {
+      console.log(chalk.white(`  Tier:    ${data.trustTier || data.tier}`));
     }
-    
+    if (data.verified) console.log(chalk.green('  ✅ Verified on-chain'));
+
     console.log(chalk.gray(`\n  Profile: https://www.saidprotocol.com/agent.html?wallet=${wallet}\n`));
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);
@@ -204,7 +199,7 @@ export async function getLeaderboard(limit: number = 10): Promise<void> {
   
   try {
     // Try the leaderboard/breakdown endpoint
-    const res = await fetch(`${API_BASE}/v1/leaderboard?limit=${limit}`);
+    const res = await fetch(`${API_BASE}/api/leaderboard?limit=${limit}`);
     
     if (!res.ok) {
       // Fallback: use discover + sort
@@ -326,8 +321,8 @@ export async function getRiskAssessment(
     }
 
     const scoreData = await scoreRes.json() as any;
-    const score = scoreData.score ?? scoreData.trust_score ?? 0;
-    const isVerified = scoreData.isVerified ?? false;
+    const score = scoreData.score ?? scoreData.trust_score ?? Math.round((scoreData.compositeScore ?? 0) * 100);
+    const isVerified = scoreData.isVerified ?? scoreData.verified ?? false;
     const isSlashed = scoreData.isSlashed ?? false;
 
     // Determine risk tier
@@ -445,17 +440,17 @@ export async function getCreditScore(wallet: string): Promise<void> {
     }
 
     const scoreData = await scoreRes.json() as any;
-    const trustScore = scoreData.score ?? scoreData.trust_score ?? 0;
-    const isVerified = scoreData.isVerified ?? false;
+    const trustScore = scoreData.score ?? scoreData.trust_score ?? Math.round((scoreData.compositeScore ?? 0) * 100);
+    const isVerified = scoreData.isVerified ?? scoreData.verified ?? false;
     const isSlashed = scoreData.isSlashed ?? false;
 
     // Try to get staking data
     let stakeAmount = 0;
     try {
-      const stakeRes = await fetch(`${API_BASE}/api/stake/${wallet}`);
+      const stakeRes = await fetch(`${API_BASE}/api/enforcement/${wallet}`);
       if (stakeRes.ok) {
         const stakeData = await stakeRes.json() as any;
-        stakeAmount = stakeData.amount || stakeData.stakeAmount || 0;
+        stakeAmount = stakeData.stakeAmountSol || stakeData.amount || stakeData.stakeAmount || 0;
       }
     } catch {}
 
@@ -475,21 +470,8 @@ export async function getCreditScore(wallet: string): Promise<void> {
     // Slashing penalty: -100 (severe)
     const slashPenalty = isSlashed ? -100 : 0;
 
-    // Activity factor (from trust score breakdown if available)
-    let activityFactor = 0;
-    try {
-      const breakdownRes = await fetch(`${API_BASE}/v1/breakdown/${wallet}`);
-      if (breakdownRes.ok) {
-        const breakdown = await breakdownRes.json() as any;
-        if (breakdown.breakdown) {
-          const activityItem = breakdown.breakdown.find((b: any) =>
-            b.category?.toLowerCase().includes('activity'));
-          if (activityItem) {
-            activityFactor = Math.min(50, activityItem.points * 2);
-          }
-        }
-      }
-    } catch {}
+    // Activity factor — estimated from trust score (breakdown API not available)
+    const activityFactor = Math.min(50, Math.floor(trustScore * 0.5));
 
     const creditScore = Math.max(300, Math.min(850,
       Math.round(baseScore + verifiedBonus + stakeBonus + activityFactor + slashPenalty)
@@ -604,17 +586,17 @@ export async function assessAgent(
     }
 
     const scoreData = await scoreRes.json() as any;
-    const score = scoreData.score ?? scoreData.trust_score ?? 0;
-    const isVerified = scoreData.isVerified ?? false;
+    const score = scoreData.score ?? scoreData.trust_score ?? Math.round((scoreData.compositeScore ?? 0) * 100);
+    const isVerified = scoreData.isVerified ?? scoreData.verified ?? false;
     const isSlashed = scoreData.isSlashed ?? false;
 
     // Fetch staking
     let stakeAmount = 0;
     try {
-      const stakeRes = await fetch(`${API_BASE}/api/stake/${wallet}`);
+      const stakeRes = await fetch(`${API_BASE}/api/enforcement/${wallet}`);
       if (stakeRes.ok) {
         const stakeData = await stakeRes.json() as any;
-        stakeAmount = stakeData.amount || stakeData.stakeAmount || 0;
+        stakeAmount = stakeData.stakeAmountSol || stakeData.amount || stakeData.stakeAmount || 0;
       }
     } catch {}
 
@@ -702,7 +684,7 @@ export async function getStakingInfo(wallet: string): Promise<void> {
     // Fetch stake data
     let stakeData: any = null;
     try {
-      const stakeRes = await fetch(`${API_BASE}/api/stake/${wallet}`);
+      const stakeRes = await fetch(`${API_BASE}/api/enforcement/${wallet}`);
       if (stakeRes.ok) {
         stakeData = await stakeRes.json() as any;
       }
@@ -711,18 +693,18 @@ export async function getStakingInfo(wallet: string): Promise<void> {
     // Fetch trust score for context
     const scoreRes = await fetch(`${API_BASE}/api/trust/${wallet}`);
     const scoreData = scoreRes.ok ? await scoreRes.json() as any : null;
-    const score = scoreData?.score ?? scoreData?.trust_score ?? 0;
+    const score = scoreData?.score ?? scoreData?.trust_score ?? Math.round((scoreData?.compositeScore ?? 0) * 100);
 
     // Fetch agent info
     const agentRes = await fetch(`${API_BASE}/api/agents/${wallet}`);
     const agentData = agentRes.ok ? await agentRes.json() as any : null;
 
-    const stakeAmount = stakeData?.amount ?? stakeData?.stakeAmount ?? 0;
+    const stakeAmount = stakeData?.stakeAmountSol ?? stakeData?.amount ?? stakeData?.stakeAmount ?? 0;
     const isSlashed = stakeData?.isSlashed ?? scoreData?.isSlashed ?? false;
     const slashCount = stakeData?.slashCount ?? 0;
     const lastSlashReason = stakeData?.lastSlashReason;
-    const stakeDate = stakeData?.stakeDate || stakeData?.stakedAt;
-    const lockupEnd = stakeData?.lockupEnd || stakeData?.unlockDate;
+    const stakeDate = stakeData?.stakedAt || stakeData?.stakeDate;
+    const lockupEnd = stakeData?.cooldownUntil || stakeData?.lockupEnd || stakeData?.unlockDate;
 
     // Agent info
     if (agentData?.name) {
