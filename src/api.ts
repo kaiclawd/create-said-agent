@@ -31,9 +31,10 @@ export interface LeaderboardEntry {
   rank: number;
   wallet: string;
   name: string;
-  score: number;
-  level: string;
+  reputationScore: number;
+  feedbackCount: number;
   isVerified: boolean;
+  twitter?: string | null;
 }
 
 export interface DiscoverResult {
@@ -44,9 +45,7 @@ export interface DiscoverResult {
 export interface Stats {
   totalAgents: number;
   verifiedAgents: number;
-  onChainAgents: number;
-  stakedAgents: number;
-  totalStake: number;
+  averageReputation?: number;
 }
 
 /**
@@ -56,43 +55,55 @@ export async function getScore(wallet: string): Promise<void> {
   console.log(chalk.cyan(`\n📊 Fetching SAID Score for ${wallet.slice(0, 8)}...${wallet.slice(-4)}...\n`));
   
   try {
-    const res = await fetch(`${API_BASE}/api/trust/${wallet}`);
+    // Use /api/verify for agent data + /api/enforcement for staking/slashing
+    const [verifyRes, enforcementRes] = await Promise.all([
+      fetch(`${API_BASE}/api/verify/${wallet}`),
+      fetch(`${API_BASE}/api/enforcement/${wallet}`),
+    ]);
     
-    if (!res.ok) {
-      if (res.status === 404) {
+    if (!verifyRes.ok && !enforcementRes.ok) {
+      if (verifyRes.status === 404) {
         console.log(chalk.yellow(`  ⚠️  Agent not found. Register first: npx create-said-agent register --keypair wallet.json`));
       } else {
-        console.log(chalk.red(`  ❌ API error (${res.status})`));
+        console.log(chalk.red(`  ❌ API error (${verifyRes.status})`));
       }
       return;
     }
     
-    const data = await res.json() as any;
-    const score = data.score ?? data.trust_score ?? 0;
-    const level = score >= 80 ? '🟢 HIGH' : score >= 50 ? '🟡 MEDIUM' : score > 0 ? '🟠 LOW' : '⚪ NONE';
+    const verifyData = verifyRes.ok ? await verifyRes.json() as any : {};
+    const enforcementData = enforcementRes.ok ? await enforcementRes.json() as any : {};
     
-    console.log(chalk.white(`  Wallet:  ${wallet}`));
-    console.log(chalk.white(`  Score:   ${chalk.bold(String(score))}/100`));
-    console.log(chalk.white(`  Level:   ${level}`));
+    const registered = verifyData.registered ?? false;
+    const verified = verifyData.verified ?? false;
     
-    // Try to get agent name
-    const agentRes = await fetch(`${API_BASE}/api/agents/${wallet}`);
-    if (agentRes.ok) {
-      const agent = await agentRes.json() as any;
-      if (agent.name) console.log(chalk.white(`  Name:    ${agent.name}`));
-      if (agent.isVerified) console.log(chalk.green('  ✅ Verified on-chain'));
+    if (!registered) {
+      console.log(chalk.yellow(`  ⚠️  Agent not registered in SAID Protocol`));
+      console.log(chalk.gray(`\n  Register: npx create-said-agent register --keypair wallet.json\n`));
+      return;
     }
     
-    // Try transparent breakdown
-    const breakdownRes = await fetch(`${API_BASE}/v1/breakdown/${wallet}`);
-    if (breakdownRes.ok) {
-      const breakdown = await breakdownRes.json() as any;
-      if (breakdown.breakdown && breakdown.breakdown.length > 0) {
-        console.log(chalk.cyan('\n  Score Breakdown:'));
-        for (const item of breakdown.breakdown) {
-          console.log(chalk.gray(`    ${item.category}: +${item.points} (${item.source})`));
-        }
-      }
+    // Score from leaderboard data (reputationScore) or enforcement risk
+    const score = verifyData.reputationScore ?? verifyData.score ?? 0;
+    const feedbackCount = verifyData.feedbackCount ?? 0;
+    const level = score >= 80 ? '🟢 HIGH' : score >= 50 ? '🟡 MEDIUM' : score > 0 ? '🟠 LOW' : '⚪ NONE';
+    
+    console.log(chalk.white(`  Wallet:   ${wallet}`));
+    if (verifyData.name) console.log(chalk.white(`  Name:     ${verifyData.name}`));
+    console.log(chalk.white(`  Score:    ${chalk.bold(String(score))}/100`));
+    console.log(chalk.white(`  Level:    ${level}`));
+    console.log(chalk.white(`  Verified: ${verified ? '✅ Yes' : '❌ No'}`));
+    if (feedbackCount > 0) console.log(chalk.white(`  Feedback: ${feedbackCount} reviews`));
+    
+    // Enforcement data
+    const staked = enforcementData.staked ?? false;
+    const stakeAmount = enforcementData.stakeAmountSol ?? 0;
+    const isSlashed = enforcementData.isSlashed ?? false;
+    
+    if (staked) {
+      console.log(chalk.green(`  Staked:   ${stakeAmount.toFixed(4)} SOL`));
+    }
+    if (isSlashed) {
+      console.log(chalk.red(`  ⚠️  SLASHED: This agent has economic penalties`));
     }
     
     console.log(chalk.gray(`\n  Profile: https://www.saidprotocol.com/agent.html?wallet=${wallet}\n`));
@@ -203,32 +214,16 @@ export async function getLeaderboard(limit: number = 10): Promise<void> {
   console.log(chalk.cyan(`\n🏆 SAID Protocol Leaderboard — Top ${limit} Agents\n`));
   
   try {
-    // Try the leaderboard/breakdown endpoint
-    const res = await fetch(`${API_BASE}/v1/leaderboard?limit=${limit}`);
+    const res = await fetch(`${API_BASE}/api/leaderboard`);
     
     if (!res.ok) {
-      // Fallback: use discover + sort
-      const discoverRes = await fetch(`${API_BASE}/xchain/discover?limit=100`);
-      if (discoverRes.ok) {
-        const data = await discoverRes.json() as any;
-        const agents = (data.agents || data || []).filter((a: any) => a.isVerified);
-        console.log(chalk.white(`  Verified agents: ${agents.length}\n`));
-        
-        for (let i = 0; i < Math.min(limit, agents.length); i++) {
-          const agent = agents[i];
-          const name = agent.name || 'Unknown';
-          const wallet = agent.wallet || '';
-          console.log(`  ${chalk.bold(`#${i + 1}`.padEnd(5))} ✅ ${chalk.bold(name.padEnd(20))} ${chalk.gray(wallet.slice(0, 12) + '...')}`);
-        }
-      } else {
-        console.log(chalk.gray('  Leaderboard not available right now.'));
-        console.log(chalk.gray(`  Check: https://www.saidprotocol.com\n`));
-      }
+      console.log(chalk.gray('  Leaderboard not available right now.'));
+      console.log(chalk.gray(`  Check: https://www.saidprotocol.com\n`));
       return;
     }
     
     const data = await res.json() as any;
-    const entries = data.leaderboard || data.agents || [];
+    const entries: any[] = data.leaderboard || data.agents || [];
     
     if (entries.length === 0) {
       console.log(chalk.gray('  No scored agents yet.'));
@@ -237,13 +232,14 @@ export async function getLeaderboard(limit: number = 10): Promise<void> {
     }
     
     for (const entry of entries.slice(0, limit)) {
-      const rank = entry.rank || entries.indexOf(entry) + 1;
+      const rank = entry.rank || 1;
       const name = entry.name || 'Unknown';
-      const score = entry.score || 0;
+      const score = entry.reputationScore ?? entry.score ?? 0;
+      const feedback = entry.feedbackCount ?? 0;
       const level = score >= 80 ? '🟢' : score >= 50 ? '🟡' : '🟠';
       const wallet = entry.wallet || '';
       
-      console.log(`  ${chalk.bold(`#${rank}`.padEnd(5))} ${level} ${chalk.bold(name.padEnd(20))} ${chalk.white(`${score}/100`)} ${chalk.gray(wallet.slice(0, 12) + '...')}`);
+      console.log(`  ${chalk.bold(`#${rank}`.padEnd(5))} ${level} ${chalk.bold(name.padEnd(22))} ${chalk.white(`${score.toFixed(1)}/100`)} ${chalk.gray(`(${feedback} reviews)`)}`);
     }
     
     console.log(chalk.gray(`\n  Full leaderboard: https://www.saidprotocol.com\n`));
@@ -271,24 +267,12 @@ export async function getStats(): Promise<void> {
     
     const total = data.totalAgents || data.total || 0;
     const verified = data.verifiedAgents || data.verified || 0;
-    const onChain = data.onChainAgents || data.onChain || 0;
-    const staked = data.stakedAgents || data.staked || 0;
+    const avgRep = data.averageReputation ?? data.avgScore;
     
     console.log(chalk.white(`  Total Agents:     ${chalk.bold(String(total))}`));
     console.log(chalk.white(`  Verified:         ${chalk.bold(String(verified))} ${chalk.green(`(${total > 0 ? Math.round(verified / total * 100) : 0}%)`)}`));
-    if (onChain > 0) console.log(chalk.white(`  On-chain:         ${chalk.bold(String(onChain))}`));
-    if (staked > 0) console.log(chalk.white(`  Staked:           ${chalk.bold(String(staked))}`));
-    
-    // Try v1/stats for more detail
-    const v1Res = await fetch(`${API_BASE}/v1/stats`);
-    if (v1Res.ok) {
-      const v1Data = await v1Res.json() as any;
-      if (v1Data.totalFeedback !== undefined) {
-        console.log(chalk.white(`  Total Feedback:   ${chalk.bold(String(v1Data.totalFeedback))}`));
-      }
-      if (v1Data.avgScore !== undefined) {
-        console.log(chalk.white(`  Average Score:    ${chalk.bold(String(v1Data.avgScore))}/100`));
-      }
+    if (avgRep !== undefined) {
+      console.log(chalk.white(`  Average Score:    ${chalk.bold((avgRep * 100).toFixed(1))}/100`));
     }
     
     console.log(chalk.gray(`\n  Website: https://www.saidprotocol.com`));
@@ -314,21 +298,36 @@ export async function getRiskAssessment(
   console.log(chalk.cyan(`\n⚠️  Risk Assessment for ${wallet.slice(0, 8)}...${wallet.slice(-4)}\n`));
 
   try {
-    // Fetch trust score first
-    const scoreRes = await fetch(`${API_BASE}/api/trust/${wallet}`);
-    if (!scoreRes.ok) {
-      if (scoreRes.status === 404) {
-        console.log(chalk.yellow(`  ⚠️  Agent not found. Register first.`));
+    // Use enforcement endpoint for risk data
+    const enforcementRes = await fetch(`${API_BASE}/api/enforcement/${wallet}`);
+    if (!enforcementRes.ok) {
+      if (enforcementRes.status === 404) {
+        console.log(chalk.yellow(`  ⚠️  Agent not found.`));
       } else {
-        console.log(chalk.red(`  ❌ API error (${scoreRes.status})`));
+        console.log(chalk.red(`  ❌ API error (${enforcementRes.status})`));
       }
       return;
     }
 
-    const scoreData = await scoreRes.json() as any;
-    const score = scoreData.score ?? scoreData.trust_score ?? 0;
-    const isVerified = scoreData.isVerified ?? false;
-    const isSlashed = scoreData.isSlashed ?? false;
+    const data = await enforcementRes.json() as any;
+    const registered = data.registered ?? false;
+    const isVerified = data.isVerified ?? false;
+    const isSlashed = data.isSlashed ?? false;
+    const stakeAmount = data.stakeAmountSol ?? 0;
+    const riskLevel = data.riskLevel ?? 'unknown';
+    const riskReasons: string[] = data.riskReasons ?? [];
+
+    // Derive score from enforcement data
+    // If registered + verified + staked → higher score
+    // If slashed → score 0
+    let score = 0;
+    if (registered && isVerified) {
+      score = 50; // Base for verified
+      if (stakeAmount > 0) score += Math.min(30, Math.floor(stakeAmount * 10));
+      if (!isSlashed) score += 20; // Clean record bonus
+    } else if (registered) {
+      score = 20; // Registered but not verified
+    }
 
     // Determine risk tier
     let tier: string;
@@ -433,31 +432,27 @@ export async function getCreditScore(wallet: string): Promise<void> {
   console.log(chalk.cyan(`\n💰 SACRS Credit Score for ${wallet.slice(0, 8)}...${wallet.slice(-4)}\n`));
 
   try {
-    // Fetch trust score (used as base for credit score calculation)
-    const scoreRes = await fetch(`${API_BASE}/api/trust/${wallet}`);
-    if (!scoreRes.ok) {
-      if (scoreRes.status === 404) {
+    // Use enforcement endpoint for all data
+    const enforcementRes = await fetch(`${API_BASE}/api/enforcement/${wallet}`);
+    if (!enforcementRes.ok) {
+      if (enforcementRes.status === 404) {
         console.log(chalk.yellow(`  ⚠️  Agent not found.`));
       } else {
-        console.log(chalk.red(`  ❌ API error (${scoreRes.status})`));
+        console.log(chalk.red(`  ❌ API error (${enforcementRes.status})`));
       }
       return;
     }
 
-    const scoreData = await scoreRes.json() as any;
-    const trustScore = scoreData.score ?? scoreData.trust_score ?? 0;
-    const isVerified = scoreData.isVerified ?? false;
-    const isSlashed = scoreData.isSlashed ?? false;
+    const data = await enforcementRes.json() as any;
+    const registered = data.registered ?? false;
+    const isVerified = data.isVerified ?? false;
+    const isSlashed = data.isSlashed ?? false;
+    const stakeAmount = data.stakeAmountSol ?? 0;
 
-    // Try to get staking data
-    let stakeAmount = 0;
-    try {
-      const stakeRes = await fetch(`${API_BASE}/api/stake/${wallet}`);
-      if (stakeRes.ok) {
-        const stakeData = await stakeRes.json() as any;
-        stakeAmount = stakeData.amount || stakeData.stakeAmount || 0;
-      }
-    } catch {}
+    // Derive trust score from enforcement data
+    const trustScore = registered && isVerified
+      ? (50 + (stakeAmount > 0 ? Math.min(30, Math.floor(stakeAmount * 10)) : 0) + (!isSlashed ? 20 : 0))
+      : registered ? 20 : 0;
 
     // SACRS Credit Score Calculation (FICO-compatible 300-850)
     // Maps SAID trust + enforcement data to a credit score
@@ -475,21 +470,11 @@ export async function getCreditScore(wallet: string): Promise<void> {
     // Slashing penalty: -100 (severe)
     const slashPenalty = isSlashed ? -100 : 0;
 
-    // Activity factor (from trust score breakdown if available)
+    // Activity factor (derived from enforcement data)
     let activityFactor = 0;
-    try {
-      const breakdownRes = await fetch(`${API_BASE}/v1/breakdown/${wallet}`);
-      if (breakdownRes.ok) {
-        const breakdown = await breakdownRes.json() as any;
-        if (breakdown.breakdown) {
-          const activityItem = breakdown.breakdown.find((b: any) =>
-            b.category?.toLowerCase().includes('activity'));
-          if (activityItem) {
-            activityFactor = Math.min(50, activityItem.points * 2);
-          }
-        }
-      }
-    } catch {}
+    if (registered && isVerified && stakeAmount > 0) {
+      activityFactor = Math.min(50, Math.floor(stakeAmount * 5));
+    }
 
     const creditScore = Math.max(300, Math.min(850,
       Math.round(baseScore + verifiedBonus + stakeBonus + activityFactor + slashPenalty)
@@ -592,31 +577,28 @@ export async function assessAgent(
   console.log(chalk.gray(`  Target: ${wallet.slice(0, 8)}...${wallet.slice(-4)}\n`));
 
   try {
-    // Fetch trust score
-    const scoreRes = await fetch(`${API_BASE}/api/trust/${wallet}`);
-    if (!scoreRes.ok) {
-      if (scoreRes.status === 404) {
+    // Use enforcement endpoint for all trust + staking data
+    const enforcementRes = await fetch(`${API_BASE}/api/enforcement/${wallet}`);
+    if (!enforcementRes.ok) {
+      if (enforcementRes.status === 404) {
         console.log(chalk.red.bold('  ❌ DENY'));
+        console.log(chalk.gray('  ↳ Agent not found in SAID registry.'));
       } else {
-        console.log(chalk.red(`  ❌ API error (${scoreRes.status})`));
+        console.log(chalk.red(`  ❌ API error (${enforcementRes.status})`));
       }
       return;
     }
 
-    const scoreData = await scoreRes.json() as any;
-    const score = scoreData.score ?? scoreData.trust_score ?? 0;
-    const isVerified = scoreData.isVerified ?? false;
-    const isSlashed = scoreData.isSlashed ?? false;
+    const data = await enforcementRes.json() as any;
+    const registered = data.registered ?? false;
+    const isVerified = data.isVerified ?? false;
+    const isSlashed = data.isSlashed ?? false;
+    const stakeAmount = data.stakeAmountSol ?? 0;
 
-    // Fetch staking
-    let stakeAmount = 0;
-    try {
-      const stakeRes = await fetch(`${API_BASE}/api/stake/${wallet}`);
-      if (stakeRes.ok) {
-        const stakeData = await stakeRes.json() as any;
-        stakeAmount = stakeData.amount || stakeData.stakeAmount || 0;
-      }
-    } catch {}
+    // Derive score from enforcement data
+    const score = registered && isVerified
+      ? (50 + (stakeAmount > 0 ? Math.min(30, Math.floor(stakeAmount * 10)) : 0) + (!isSlashed ? 20 : 0))
+      : registered ? 20 : 0;
 
     // Evaluate each rule
     const checks: { name: string; passed: boolean; detail: string }[] = [];
@@ -699,51 +681,48 @@ export async function getStakingInfo(wallet: string): Promise<void> {
   console.log(chalk.cyan(`\n⛓️  Staking & Enforcement for ${wallet.slice(0, 8)}...${wallet.slice(-4)}\n`));
 
   try {
-    // Fetch stake data
-    let stakeData: any = null;
-    try {
-      const stakeRes = await fetch(`${API_BASE}/api/stake/${wallet}`);
-      if (stakeRes.ok) {
-        stakeData = await stakeRes.json() as any;
-      }
-    } catch {}
+    // Use enforcement endpoint for all staking/slashing data
+    const enforcementRes = await fetch(`${API_BASE}/api/enforcement/${wallet}`);
+    if (!enforcementRes.ok) {
+      console.log(chalk.red(`  ❌ API error (${enforcementRes.status})`));
+      return;
+    }
+    const data = await enforcementRes.json() as any;
 
-    // Fetch trust score for context
-    const scoreRes = await fetch(`${API_BASE}/api/trust/${wallet}`);
-    const scoreData = scoreRes.ok ? await scoreRes.json() as any : null;
-    const score = scoreData?.score ?? scoreData?.trust_score ?? 0;
+    // Also try to get agent info from verify
+    const verifyRes = await fetch(`${API_BASE}/api/verify/${wallet}`);
+    const verifyData = verifyRes.ok ? await verifyRes.json() as any : null;
 
-    // Fetch agent info
-    const agentRes = await fetch(`${API_BASE}/api/agents/${wallet}`);
-    const agentData = agentRes.ok ? await agentRes.json() as any : null;
-
-    const stakeAmount = stakeData?.amount ?? stakeData?.stakeAmount ?? 0;
-    const isSlashed = stakeData?.isSlashed ?? scoreData?.isSlashed ?? false;
-    const slashCount = stakeData?.slashCount ?? 0;
-    const lastSlashReason = stakeData?.lastSlashReason;
-    const stakeDate = stakeData?.stakeDate || stakeData?.stakedAt;
-    const lockupEnd = stakeData?.lockupEnd || stakeData?.unlockDate;
+    const registered = data.registered ?? false;
+    const stakeAmount = data.stakeAmountSol ?? 0;
+    const isSlashed = data.isSlashed ?? false;
+    const slashCount = data.slashCount ?? 0;
+    const staked = data.staked ?? false;
+    const stakedAt = data.stakedAt;
+    const cooldownUntil = data.cooldownUntil;
+    const riskLevel = data.riskLevel ?? 'unknown';
+    const riskReasons: string[] = data.riskReasons ?? [];
 
     // Agent info
-    if (agentData?.name) {
-      console.log(chalk.white(`  Agent:         ${agentData.name}`));
+    if (verifyData?.name) {
+      console.log(chalk.white(`  Agent:         ${verifyData.name}`));
     }
     console.log(chalk.white(`  Wallet:        ${wallet}`));
-    console.log(chalk.white(`  Trust Score:   ${score}/100`));
+    console.log(chalk.white(`  Registered:    ${registered ? '✅ Yes' : '❌ No'}`));
     console.log('');
 
     // Staking status
     console.log(chalk.cyan('  Economic Security:'));
-    if (stakeAmount > 0) {
+    if (staked && stakeAmount > 0) {
       console.log(chalk.green(`    Status:        ✅ STAKED`));
       console.log(chalk.white(`    Amount:        ${stakeAmount.toFixed(4)} SOL`));
-      if (stakeDate) {
-        console.log(chalk.gray(`    Staked since:  ${new Date(stakeDate).toLocaleDateString()}`));
+      if (stakedAt) {
+        console.log(chalk.gray(`    Staked since:  ${new Date(stakedAt).toLocaleDateString()}`));
       }
-      if (lockupEnd) {
-        const unlock = new Date(lockupEnd);
+      if (cooldownUntil) {
+        const unlock = new Date(cooldownUntil);
         const isLocked = unlock > new Date();
-        console.log(chalk.white(`    Lockup:        ${isLocked ? '🔒 Locked until ' + unlock.toLocaleDateString() : '🔓 Unlocked'}`));
+        console.log(chalk.white(`    Cooldown:      ${isLocked ? '🔒 Until ' + unlock.toLocaleDateString() : '🔓 Ready'}`));
       }
     } else {
       console.log(chalk.gray(`    Status:        ⬜ Not staked`));
@@ -758,22 +737,30 @@ export async function getStakingInfo(wallet: string): Promise<void> {
       if (slashCount > 0) {
         console.log(chalk.red(`    Slash count:   ${slashCount}`));
       }
-      if (lastSlashReason) {
-        console.log(chalk.red(`    Last reason:   ${lastSlashReason}`));
-      }
     } else {
       console.log(chalk.green(`    Status:        ✅ Good standing`));
     }
 
+    // Risk assessment from on-chain data
+    console.log('');
+    console.log(chalk.cyan('  Risk Assessment:'));
+    const riskIcon = riskLevel === 'low' ? '🟢' : riskLevel === 'medium' ? '🟡' : riskLevel === 'high' ? '🟠' : '🔴';
+    console.log(chalk.white(`    Level:         ${riskIcon} ${riskLevel.toUpperCase()}`));
+    if (riskReasons.length > 0) {
+      for (const reason of riskReasons) {
+        console.log(chalk.gray(`    Reason:        ${reason}`));
+      }
+    }
+
     // Economic trust level
     if (stakeAmount >= 10) {
-      console.log(chalk.green(`    Trust level:   💎 HIGH (significant economic backing)`));
+      console.log(chalk.green(`\n    Trust level:   💎 HIGH (significant economic backing)`));
     } else if (stakeAmount >= 1) {
-      console.log(chalk.green(`    Trust level:   🟢 MODERATE`));
+      console.log(chalk.green(`\n    Trust level:   🟢 MODERATE`));
     } else if (stakeAmount > 0) {
-      console.log(chalk.yellow(`    Trust level:   🟡 LOW`));
+      console.log(chalk.yellow(`\n    Trust level:   🟡 LOW`));
     } else {
-      console.log(chalk.gray(`    Trust level:   ⚪ NONE (no stake)`));
+      console.log(chalk.gray(`\n    Trust level:   ⚪ NONE (no stake)`));
     }
 
     // What staking means
@@ -783,11 +770,10 @@ export async function getStakingInfo(wallet: string): Promise<void> {
     console.log(chalk.gray('    • Slashing penalties are enforced on-chain'));
     console.log(chalk.gray('    • Higher stakes = stronger trust signal'));
 
-    if (stakeAmount === 0 && !isSlashed) {
+    if (!staked && !isSlashed) {
       console.log('');
       console.log(chalk.cyan('  To stake:'));
       console.log(chalk.gray('    Visit https://www.saidprotocol.com/stake.html'));
-      console.log(chalk.gray('    Or run: npx said-sdk stake --keypair wallet.json --amount 1'));
     }
 
     console.log(chalk.gray(`\n  Profile: https://www.saidprotocol.com/agent.html?wallet=${wallet}\n`));
