@@ -24,7 +24,7 @@ console.log(chalk.cyan(`
 
 import { loadKeypair, registerOnAPI, registerOnChain, getVerified, getStatus } from './onchain.js';
 import { PublicKey } from '@solana/web3.js';
-import { getScore, submitFeedback, discoverAgents, getLeaderboard, getStats, getRiskAssessment, getCreditScore, assessAgent, getStakingInfo } from './api.js';
+import { getScore, submitFeedback, discoverAgents, getLeaderboard, getStats, getRiskAssessment, getCreditScore, assessAgent, getStakingInfo, getTrustCrisisReport } from './api.js';
 
 program
   .name('create-said-agent')
@@ -227,6 +227,15 @@ program
   .requiredOption('--wallet <address>', 'Solana wallet address')
   .action(async (opts) => {
     await getStakingInfo(opts.wallet);
+  });
+
+// trust-crisis subcommand — economic enforcement vs reputation analysis
+program
+  .command('trust-crisis')
+  .description('Compare economic enforcement vs ERC-8004 reputation signals (arXiv Sybil study)')
+  .requiredOption('--wallet <address>', 'Solana wallet address')
+  .action(async (opts) => {
+    await getTrustCrisisReport(opts.wallet);
   });
 
 program.parse();

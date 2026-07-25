@@ -782,3 +782,110 @@ export async function getStakingInfo(wallet: string): Promise<void> {
     console.error(chalk.red(`\n  ❌ Failed: ${msg}\n`));
   }
 }
+
+// ── Trust Crisis Report ─────────────────────────────
+
+export async function getTrustCrisisReport(wallet: string): Promise<void> {
+  console.log(chalk.cyan(`\n  🔍 Trust Crisis Report — ${wallet.slice(0, 8)}...`));
+  console.log(chalk.gray('  Based on arXiv:2607.08084 (ERC-8004 Sybil research)\n'));
+
+  try {
+    const res = await fetch(`${API_BASE}/api/trust-crisis/${wallet}`);
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      console.error(chalk.red(`\n  ❌ API returned ${res.status}: ${body.slice(0, 200)}\n`));
+      return;
+    }
+    const data = await res.json() as {
+      economicTrust: {
+        registered: boolean;
+        staked: boolean;
+        stakeAmountSol: number;
+        isSlashed: boolean;
+        slashCount: number;
+        isVerified: boolean;
+        verificationTier: number;
+        enforcementTier: string;
+        economicSecuritySol: number;
+        riskLevel: string;
+        riskReasons: string[];
+      };
+      reputationSignals: {
+        feedbackCount: number;
+        trustScore: number | null;
+        sybilVulnerable: boolean;
+        sybilRiskNote: string;
+      };
+      erc8004Context: {
+        sybilRateEth: number;
+        invalidatedAfterSybilRemovalBsc: number;
+        invalidatedAfterSybilRemovalBase: number;
+        liveServiceEndpointRate: string;
+        manipulationCostUsd: string;
+      };
+      trustVerdict: {
+        economicSecuritySol: number;
+        hasEconomicCommitment: boolean;
+        skinInGameLevel: string;
+        hasBeenSlashed: boolean;
+        recommendation: string;
+        recommendationReason: string;
+        insight: string;
+      };
+    };
+
+    // Economic Trust
+    console.log(chalk.cyan('  Economic Enforcement:'));
+    const et = data.economicTrust;
+    if (!et.registered) {
+      console.log(chalk.gray('    ❌ Not registered on SAID'));
+    } else {
+      const tierIcon = et.enforcementTier === 'economic' ? '🟢' : et.enforcementTier === 'reputation' ? '🟡' : '⚫';
+      console.log(chalk.white(`    Tier:          ${tierIcon} ${et.enforcementTier.toUpperCase()}`));
+      console.log(chalk.white(`    Verified:      ${et.isVerified ? '✅' : '❌'} (Tier ${et.verificationTier})`));
+      console.log(chalk.white(`    Staked:        ${et.staked ? '🔒 ' + et.stakeAmountSol.toFixed(4) + ' SOL' : '🔓 No stake'}`));
+      console.log(chalk.white(`    Slashed:       ${et.isSlashed ? '⚠️  ' + et.slashCount + 'x' : '✅ Clean'}`));
+      console.log(chalk.white(`    Econ Security: ${et.economicSecuritySol.toFixed(4)} SOL at risk`));
+      const riskIcon = et.riskLevel === 'low' ? '🟢' : et.riskLevel === 'medium' ? '🟡' : et.riskLevel === 'high' ? '🟠' : '🔴';
+      console.log(chalk.white(`    Risk Level:    ${riskIcon} ${et.riskLevel.toUpperCase()}`));
+    }
+
+    // Reputation Signals
+    console.log('');
+    console.log(chalk.cyan('  Reputation Signals:'));
+    const rs = data.reputationSignals;
+    console.log(chalk.white(`    Feedback:      ${rs.feedbackCount} reviews`));
+    if (rs.trustScore !== null) {
+      console.log(chalk.white(`    Trust Score:   ${rs.trustScore}/100`));
+    }
+    console.log(chalk.yellow(`    Sybil Risk:    ⚠️  ${rs.sybilRiskNote || 'ERC-8004 reputation vulnerable to coordinated manipulation'}`));
+
+    // ERC-8004 Context
+    console.log('');
+    console.log(chalk.cyan('  ERC-8004 Research Context:'));
+    const ec = data.erc8004Context;
+    console.log(chalk.gray(`    Eth Sybil Rate:       ${(ec.sybilRateEth * 100).toFixed(1)}% of reviewers`));
+    console.log(chalk.gray(`    BSC Invalid (Sybil):  ${(ec.invalidatedAfterSybilRemovalBsc * 100).toFixed(1)}% of agents`));
+    console.log(chalk.gray(`    Base Invalid (Sybil): ${(ec.invalidatedAfterSybilRemovalBase * 100).toFixed(1)}% of agents`));
+    console.log(chalk.gray(`    Manipulation Cost:    ${ec.manipulationCostUsd}`));
+    console.log(chalk.gray(`    Live Endpoints:       ${ec.liveServiceEndpointRate} of registered agents`));
+
+    // Verdict
+    console.log('');
+    console.log(chalk.cyan('  Verdict:'));
+    const tv = data.trustVerdict;
+    const verdictIcon = tv.recommendation === 'trusted' ? '✅' : tv.recommendation === 'caution' ? '🟡' : tv.recommendation === 'review' ? '🟠' : tv.recommendation === 'deny' ? '🔴' : '⚪';
+    console.log(chalk.white(`    Recommendation: ${verdictIcon} ${tv.recommendation.toUpperCase()}`));
+    console.log(chalk.gray(`    Skin in Game:   ${tv.skinInGameLevel}`));
+    console.log(chalk.gray(`    Reason:         ${tv.recommendationReason}`));
+    if (tv.insight) {
+      console.log(chalk.gray(`    Insight:        ${tv.insight}`));
+    }
+
+    console.log(chalk.gray(`\n  Source: arXiv:2607.08084`));
+    console.log(chalk.gray(`  Profile: https://www.saidprotocol.com/agent.html?wallet=${wallet}\n`));
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error(chalk.red(`\n  ❌ Failed: ${msg}\n`));
+  }
+}

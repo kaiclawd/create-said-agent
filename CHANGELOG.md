@@ -2,6 +2,23 @@
 
 All notable changes to `create-said-agent` will be documented in this file.
 
+## [0.7.0] — 2026-07-25
+
+### Added — Trust Crisis Command
+
+New `trust-crisis` command exposes the arXiv:2607.08084 research findings directly
+to developers. Compares economic enforcement (staking/slashing) against
+ERC-8004 reputation signals with full Sybil manipulation context.
+
+- `create-said-agent trust-crisis --wallet <address>` — displays economic
+  enforcement tier, stake amount, slashing record, reputation signals with
+  Sybil vulnerability flags, ERC-8004 manipulation costs and Sybil rates,
+  and a final trust verdict with recommendation
+- Based on peer-reviewed research proving 73.5% of ERC-8004 reviewers show
+  coordinated Sybil behavior
+- 12th CLI command (joining register, verify, status, score, feedback,
+  discover, leaderboard, stats, risk, credit, assess, stake)
+
 ## [0.6.2] — 2026-07-24
 
 ### Fixed
