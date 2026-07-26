@@ -53,7 +53,7 @@ function scaffoldLight(options: ScaffoldOptions): void {
     dependencies: {
       '@anthropic-ai/sdk': '^0.39.0',
       '@solana/web3.js': '^1.98.0',
-      'said-sdk': '^0.7.0',
+      '@said-protocol/client': '^0.21.0',
       'dotenv': '^16.4.5'
     }
   };
@@ -264,7 +264,7 @@ function scaffoldCrypto(options: ScaffoldOptions): void {
       '@anthropic-ai/sdk': '^0.39.0',
       '@solana/web3.js': '^1.98.0',
       '@solana/spl-token': '^0.4.9',
-      'said-sdk': '^0.7.0',
+      '@said-protocol/client': '^0.21.0',
       'dotenv': '^16.4.5',
       'bs58': '^6.0.0'
     }
@@ -855,7 +855,7 @@ Your agent has verified on-chain identity. Check \`said.json\` for details.
 **Upgrade to on-chain:**
 \`\`\`bash
 # Fund wallet with ~0.005 SOL, then:
-npx said-sdk register -k wallet.json -n "${agentName}"
+npx @said-protocol/client register -k wallet.json -n "${agentName}"
 \`\`\`
 
 ## Links
@@ -1189,7 +1189,7 @@ function scaffoldEliza(options: ScaffoldOptions, walletAddress: string): void {
       '@elizaos/client-twitter': '^1.0.0',
       '@elizaos/plugin-solana': '^1.0.0',
       '@solana/web3.js': '^1.98.0',
-      'said-sdk': '^0.7.0',
+      '@said-protocol/client': '^0.21.0',
       'dotenv': '^16.4.5'
     }
   };

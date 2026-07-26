@@ -92,12 +92,12 @@ Your identity is currently **{{STATUS}}** (off-chain).
 To anchor on-chain:
 
 1. Fund your wallet with ~0.005 SOL
-2. Run: `npx said-sdk register -k wallet.json -n "{{AGENT_NAME}}"`
+2. Run: `npx @said-protocol/client register -k wallet.json -n "{{AGENT_NAME}}"`
 
 To get verified badge (+0.01 SOL):
 
 ```bash
-npx said-sdk verify -k wallet.json -m twitter
+npx @said-protocol/client verify -k wallet.json -m twitter
 ```
 
 ## Links

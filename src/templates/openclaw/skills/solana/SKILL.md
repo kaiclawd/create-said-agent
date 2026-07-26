@@ -1,6 +1,6 @@
 ---
 name: solana-crypto
-description: Solana blockchain tools. Check balances, verify SAID agents, get trust scores, sign transactions. Use for any Solana wallet or blockchain operations.
+description: Solana blockchain tools. Check balances, verify SAID agents, get trust scores, risk assessments, credit scores, and sign transactions. Use for any Solana wallet or blockchain operations.
 ---
 
 # Solana & Crypto Skill
@@ -18,27 +18,68 @@ curl -X POST "https://api.mainnet-beta.solana.com" \
 
 ### Verify SAID Agent
 ```bash
-curl "https://api.saidprotocol.com/api/agents/WALLET_ADDRESS"
+curl "https://api.saidprotocol.com/api/verify/WALLET_ADDRESS"
 ```
 
-### Get Trust Score
+### Get Agent Profile
 ```bash
-curl "https://api.saidprotocol.com/api/trust/WALLET_ADDRESS"
+curl "https://api.saidprotocol.com/api/verify/WALLET_ADDRESS"
 ```
 
-### Lookup Agent Profile
+### Get Agent Feedback
 ```bash
-curl "https://api.saidprotocol.com/api/agents/WALLET_ADDRESS"
+curl "https://api.saidprotocol.com/api/agents/WALLET_ADDRESS/feedback"
 ```
 
-## SAID Protocol Integration
+### View Leaderboard
+```bash
+curl "https://api.saidprotocol.com/api/leaderboard"
+```
+
+### Protocol Stats
+```bash
+curl "https://api.saidprotocol.com/api/stats"
+```
+
+## SAID Protocol API
 
 | Endpoint | Purpose |
 |----------|---------|
-| `/api/agents/:wallet` | Get agent profile |
-| `/api/trust/:wallet` | Get trust score |
-| `/api/verify/:wallet` | Check verification |
-| `/api/leaderboard` | Top agents |
+| `/api/verify/:wallet` | Full agent profile + trust score + verification |
+| `/api/agents/:wallet/feedback` | Agent reviews and feedback |
+| `/api/leaderboard` | Top agents by reputation |
+| `/api/stats` | Protocol-wide statistics |
+| `/api/cards/:wallet.json` | ERC-8004 Agent Card (JSON-LD) |
+
+## Using the SAID SDK
+
+For complex operations, use the SDK instead of raw HTTP:
+
+```bash
+npx @said-protocol/client verify --wallet WALLET_ADDRESS
+npx @said-protocol/client trust --wallet WALLET_ADDRESS
+npx @said-protocol/client risk --wallet WALLET_ADDRESS
+npx @said-protocol/client credit --wallet WALLET_ADDRESS
+npx @said-protocol/client leaderboard --limit 10
+npx @said-protocol/client stats
+```
+
+### MCP Server (for AI agents)
+
+Add SAID trust tools to any MCP-compatible AI agent:
+
+```json
+{
+  "mcpServers": {
+    "said": {
+      "command": "npx",
+      "args": ["-y", "@said-protocol/client", "--mcp"]
+    }
+  }
+}
+```
+
+This gives your agent 12 trust-related tools (verify, score, risk, credit, etc.)
 
 ## Wallet Operations
 
@@ -67,4 +108,5 @@ console.log(bs58.encode(signature));
 ## Links
 
 - SAID Protocol: https://www.saidprotocol.com
+- SDK: https://www.npmjs.com/package/@said-protocol/client
 - Solana Explorer: https://solscan.io

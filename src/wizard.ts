@@ -222,7 +222,7 @@ async function runScaffold(
   
   console.log(chalk.cyan('Upgrade to on-chain (optional):'));
   console.log(chalk.gray('  • Fund wallet with 0.005 SOL'));
-  console.log(chalk.gray('  • Run: npx said-sdk register'));
+  console.log(chalk.gray('  • Run: npx @said-protocol/client register'));
   console.log('');
   
   console.log(chalk.gray('Docs: https://www.saidprotocol.com/docs.html'));
