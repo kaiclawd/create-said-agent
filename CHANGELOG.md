@@ -2,6 +2,30 @@
 
 All notable changes to `create-said-agent` will be documented in this file.
 
+## [0.8.0] — 2026-07-26
+
+### Added — Agent Commerce Commands (x402 + ERC-8183)
+
+Three new commands aligned with SAID's 90-day build priority. These expose
+the SDK's v0.20.0 features directly from the CLI:
+
+- **`passport`** — Generate a SAID Reputation Passport with verdict, risk level,
+  escrow percentage, and integration formats (MCP _meta, x402 headers, A2A card,
+  AP2 mandate). One command shows everything a marketplace needs to trust an agent.
+
+- **`enforce`** — Run an x402 Enforcement Oracle check. Returns ALLOW /
+  REQUIRE_ESCROW / BLOCK verdict with economic context (stake, slash history,
+  score). Includes max recommended transaction value in USDC. Two-sided mode
+  with `--payee` for marketplace flows.
+
+- **`trust-oracle`** — Run an ERC-8183 Trust Oracle evaluation. Scores agents
+  against 6 commerce criteria (deliverable, claim, trust minimum, staked,
+  slash history, evidence). Returns PASS (release 100%) / PARTIAL (release 50%)
+  / FAIL (refund + slash recommendation).
+
+These commands make the CLI a complete developer onboarding tool: scaffold,
+register, verify, then participate in agent commerce — all from one tool.
+
 ## [0.7.0] — 2026-07-25
 
 ### Added — Trust Crisis Command

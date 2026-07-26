@@ -25,6 +25,7 @@ console.log(chalk.cyan(`
 import { loadKeypair, registerOnAPI, registerOnChain, getVerified, getStatus } from './onchain.js';
 import { PublicKey } from '@solana/web3.js';
 import { getScore, submitFeedback, discoverAgents, getLeaderboard, getStats, getRiskAssessment, getCreditScore, assessAgent, getStakingInfo, getTrustCrisisReport } from './api.js';
+import { getPassport, enforceCheck, trustOracleCheck } from './enforcement.js';
 
 program
   .name('create-said-agent')
@@ -236,6 +237,34 @@ program
   .requiredOption('--wallet <address>', 'Solana wallet address')
   .action(async (opts) => {
     await getTrustCrisisReport(opts.wallet);
+  });
+
+// passport subcommand — SAID Reputation Passport (MCP, A2A, x402, AP2)
+program
+  .command('passport')
+  .description('Generate a SAID Reputation Passport for an agent (MCP/A2A/x402/AP2 ready)')
+  .requiredOption('--wallet <address>', 'Solana wallet address')
+  .action(async (opts) => {
+    await getPassport(opts.wallet);
+  });
+
+// enforce subcommand — x402 Enforcement Oracle check
+program
+  .command('enforce')
+  .description('Run x402 Enforcement Oracle check (allow/escrow/block verdict)')
+  .requiredOption('--wallet <address>', 'Payer wallet address')
+  .option('--payee <address>', 'Payee wallet address (optional, for two-sided checks)')
+  .action(async (opts) => {
+    await enforceCheck(opts.wallet, opts.payee);
+  });
+
+// trust-oracle subcommand — ERC-8183 Trust Oracle evaluation
+program
+  .command('trust-oracle')
+  .description('Run ERC-8183 Trust Oracle evaluation (evaluator verdict for marketplace flows)')
+  .requiredOption('--wallet <address>', 'Agent wallet address to evaluate')
+  .action(async (opts) => {
+    await trustOracleCheck(opts.wallet);
   });
 
 program.parse();

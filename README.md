@@ -60,7 +60,7 @@ npx create-said-agent leaderboard --limit 10
 npx create-said-agent stats
 ```
 
-### Trust Enforcement (NEW in v0.6.0)
+### Trust Enforcement (v0.6.0+)
 
 ```bash
 # Assess transaction risk (6-tier model with escrow recommendations)
@@ -77,6 +77,23 @@ npx create-said-agent assess --wallet WALLET_ADDRESS --require-verified --min-st
 
 # View staking and enforcement info
 npx create-said-agent stake --wallet WALLET_ADDRESS
+```
+
+### Agent Commerce — x402 & ERC-8183 (NEW in v0.8.0)
+
+```bash
+# Generate a SAID Reputation Passport (MCP, A2A, x402, AP2 formats)
+npx create-said-agent passport --wallet WALLET_ADDRESS
+
+# Run x402 Enforcement Oracle check (allow/escrow/block)
+npx create-said-agent enforce --wallet WALLET_ADDRESS
+npx create-said-agent enforce --wallet PAYER --payee PAYEE
+
+# Run ERC-8183 Trust Oracle evaluation (pass/partial/fail)
+npx create-said-agent trust-oracle --wallet WALLET_ADDRESS
+
+# Compare economic enforcement vs reputation-only (arXiv Sybil study)
+npx create-said-agent trust-crisis --wallet WALLET_ADDRESS
 ```
 
 ## Templates
@@ -156,7 +173,7 @@ npx create-said-agent verify --keypair wallet.json
 |------|-------------|
 | [said](https://github.com/SAID-Protocol/said) | On-chain Solana program |
 | [said-api](https://github.com/SAID-Protocol/said-api) | REST API for agent registry |
-| [said-sdk](https://github.com/SAID-Protocol/said-sdk) | TypeScript SDK + CLI (v0.11.0 — SACRS credit scores, risk assessment, trust middleware) |
+| [said-sdk](https://github.com/SAID-Protocol/said-sdk) | TypeScript SDK + CLI (v0.20.0 — Enforcement Oracle, Trust Oracle, Passport, x402, ERC-8183 ACP) |
 | [said-website](https://github.com/SAID-Protocol/said-website) | Agent directory & profiles |
 | [said-mcp-server](https://github.com/kaiclawd/said-mcp-server) | MCP trust layer (11 tools) |
 | [said-score-api](https://github.com/kaiclawd/said-score-api) | Transparent scoring API |
