@@ -889,3 +889,118 @@ export async function getTrustCrisisReport(wallet: string): Promise<void> {
     console.error(chalk.red(`\n  ❌ Failed: ${msg}\n`));
   }
 }
+
+/**
+ * Trust Gate — quick combined check for transaction safety.
+ * Combines identity verification + enforcement data + risk assessment
+ * into a single allow/deny/review verdict.
+ */
+export async function trustGate(
+  wallet: string,
+  options: { policy?: string; amount?: number } = {}
+): Promise<void> {
+  const policy = options.policy || 'balanced';
+  const validPolicies = ['strict', 'balanced', 'permissive', 'marketplace', 'defi'];
+  if (!validPolicies.includes(policy)) {
+    console.error(chalk.red(`\n  ❌ Invalid policy '${policy}'. Use: ${validPolicies.join(', ')}\n`));
+    return;
+  }
+
+  console.log(chalk.cyan(`\n  🚦 Trust Gate — ${wallet.slice(0, 8)}...${wallet.slice(-4)} (${policy})\n`));
+
+  try {
+    // Fetch verify + enforcement data in parallel
+    const [verifyRes, enforcementRes] = await Promise.all([
+      fetch(`${API_BASE}/api/verify/${wallet}`).catch(() => null),
+      fetch(`${API_BASE}/api/enforcement/${wallet}`).catch(() => null),
+    ]);
+
+    if (!verifyRes?.ok && !enforcementRes?.ok) {
+      console.log(chalk.red('  ❌ Agent not found in SAID registry.\n'));
+      return;
+    }
+
+    const verifyData = verifyRes?.ok ? await verifyRes.json() as any : {};
+    const enforcementData = enforcementRes?.ok ? await enforcementRes.json() as any : {};
+
+    const rawTrustScore = verifyData.trustScore;
+    const score = typeof rawTrustScore === 'object' ? (rawTrustScore?.score ?? 0) : (rawTrustScore ?? verifyData.reputation?.score ?? verifyData.reputation ?? 0);
+    const verified = verifyData.verified ?? false;
+    const tier = (typeof rawTrustScore === 'object' ? rawTrustScore?.tier : null) ?? verifyData.reputation?.tier ?? verifyData.tier ?? 'unranked';
+    const staked = typeof enforcementData.staked === 'number' ? enforcementData.staked : (enforcementData.stakeAmountSol ?? enforcementData.stakedAmount ?? 0);
+    const slashCount = enforcementData.slashCount ?? 0;
+    const slashed = enforcementData.slashed ?? slashCount > 0;
+    const enforcementTier = enforcementData.enforcementTier ?? (staked > 0 ? 'economic' : 'none');
+
+    // Policy thresholds
+    const policyConfig: Record<string, { minScore: number; requireStaked: boolean; minStake?: number; maxSlashes: number; requireVerified: boolean }> = {
+      permissive: { minScore: 0, requireStaked: false, maxSlashes: Infinity, requireVerified: false },
+      balanced:   { minScore: 10, requireStaked: false, maxSlashes: 3, requireVerified: false },
+      marketplace: { minScore: 20, requireStaked: false, maxSlashes: 1, requireVerified: false },
+      strict:     { minScore: 40, requireStaked: true, minStake: 0.1, maxSlashes: 0, requireVerified: true },
+      defi:       { minScore: 50, requireStaked: true, minStake: 0.5, maxSlashes: 0, requireVerified: true },
+    };
+
+    const config = policyConfig[policy];
+    const reasons: string[] = [];
+    let blocked = false;
+
+    // Evaluate against policy
+    if (config.requireVerified && !verified) {
+      reasons.push('not verified'); blocked = true;
+    }
+    if (score < config.minScore) {
+      reasons.push(`score ${score}/${config.minScore}`); blocked = true;
+    }
+    if (config.requireStaked && staked === 0) {
+      reasons.push('no stake (economic commitment required)'); blocked = true;
+    }
+    if (config.minStake && staked < config.minStake) {
+      reasons.push(`staked ${staked.toFixed(2)}/${config.minStake} SOL`); blocked = true;
+    }
+    if (slashCount > config.maxSlashes) {
+      reasons.push(`${slashCount} slash(es)`); blocked = true;
+    }
+
+    // Calculate escrow terms based on trust
+    let escrowPct = 0;
+    let maxTxUSDC = 10000;
+    if (score < 20 || slashed) { escrowPct = 100; maxTxUSDC = 10; }
+    else if (score < 40) { escrowPct = 50; maxTxUSDC = 100; }
+    else if (score < 60) { escrowPct = 25; maxTxUSDC = 500; }
+    else if (score < 80) { escrowPct = 10; maxTxUSDC = 1000; }
+    else { escrowPct = 0; maxTxUSDC = 10000; }
+
+    // Display
+    console.log(chalk.white(`  Score:       ${score}/100 (${tier})`));
+    console.log(chalk.white(`  Verified:    ${verified ? '✅' : '❌'}`));
+    console.log(chalk.white(`  Staked:      ${staked > 0 ? '🔒 ' + staked.toFixed(2) + ' SOL' : '🔓 none'}`));
+    console.log(chalk.white(`  Slashed:     ${slashed ? '⚠️  ' + slashCount + 'x' : '✅ clean'}`));
+    console.log(chalk.white(`  Enforcement: ${enforcementTier}`));
+
+    console.log('');
+    console.log(chalk.white(`  Escrow:      ${escrowPct > 0 ? escrowPct + '% hold' : 'none required'}`));
+    console.log(chalk.white(`  Max Tx:      $${maxTxUSDC.toLocaleString()} USDC`));
+
+    if (options.amount) {
+      console.log(chalk.white(`  Requested:   $${options.amount} USDC`));
+      if (options.amount > maxTxUSDC) {
+        reasons.push(`amount $${options.amount} > max $${maxTxUSDC}`);
+        blocked = true;
+      }
+    }
+
+    console.log('');
+    if (blocked) {
+      console.log(chalk.red(`  🚫 DENY — ${reasons.join(', ')}`));
+    } else if (reasons.length > 0) {
+      console.log(chalk.yellow(`  🟡 REVIEW — ${reasons.join(', ')}`));
+    } else {
+      console.log(chalk.green(`  ✅ ALLOW — trusted enough for ${policy} policy`));
+    }
+    console.log(chalk.gray(`\n  Profile: https://www.saidprotocol.com/agent.html?wallet=${wallet}\n`));
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error(chalk.red(`\n  ❌ Gate check failed: ${msg}\n`));
+  }
+}

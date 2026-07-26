@@ -53,7 +53,7 @@ function scaffoldLight(options: ScaffoldOptions): void {
     dependencies: {
       '@anthropic-ai/sdk': '^0.39.0',
       '@solana/web3.js': '^1.98.0',
-      'said-sdk': '^0.7.0',
+      '@said-protocol/client': '^0.19.0',
       'dotenv': '^16.4.5'
     }
   };
@@ -264,7 +264,7 @@ function scaffoldCrypto(options: ScaffoldOptions): void {
       '@anthropic-ai/sdk': '^0.39.0',
       '@solana/web3.js': '^1.98.0',
       '@solana/spl-token': '^0.4.9',
-      'said-sdk': '^0.7.0',
+      '@said-protocol/client': '^0.19.0',
       'dotenv': '^16.4.5',
       'bs58': '^6.0.0'
     }
@@ -751,20 +751,77 @@ def get_my_identity() -> dict:
     }
 
 def verify_agent(wallet_address: str) -> dict:
-    """Verify another agent's SAID identity."""
+    """Verify another agent's SAID identity and trust score."""
     try:
-        url = f"https://api.saidprotocol.com/api/agents/{wallet_address}"
+        url = f"https://api.saidprotocol.com/api/verify/{wallet_address}"
         with urllib.request.urlopen(url, timeout=10) as resp:
             data = json.loads(resp.read().decode())
             return {
                 "verified": True,
                 "name": data.get("name"),
                 "wallet": data.get("wallet"),
-                "isVerified": data.get("isVerified"),
+                "isVerified": data.get("verified", False),
+                "trustScore": data.get("trustScore", 0),
+                "tier": data.get("tier", "unranked"),
                 "profile": f"https://www.saidprotocol.com/agent.html?wallet={wallet_address}"
             }
     except Exception as e:
         return {"verified": False, "error": str(e)}
+
+def check_enforcement(wallet_address: str) -> dict:
+    """Check staking/slashing enforcement data for an agent.
+    
+    This is SAID's unique differentiator — real economic consequences.
+    Agents stake SOL as collateral and get slashed for bad behavior.
+    """
+    try:
+        url = f"https://api.saidprotocol.com/api/enforcement/{wallet_address}"
+        with urllib.request.urlopen(url, timeout=10) as resp:
+            data = json.loads(resp.read().decode())
+            staked = data.get("stakedAmount", data.get("staked", 0))
+            slash_count = data.get("slashCount", 0)
+            return {
+                "wallet": wallet_address,
+                "staked": staked,
+                "slashed": data.get("slashed", slash_count > 0),
+                "slashCount": slash_count,
+                "enforcementTier": data.get("enforcementTier", "none" if staked == 0 else "economic"),
+                "hasSkinInTheGame": staked > 0,
+            }
+    except Exception as e:
+        return {"error": str(e)}
+
+def trust_gate(wallet_address: str, policy: str = "balanced") -> dict:
+    """Check if an agent passes trust gate for a given policy.
+    
+    Policies: strict, balanced, permissive, marketplace, defi.
+    Returns allow/deny/review verdict with escrow recommendations.
+    """
+    try:
+        url = f"https://api.saidprotocol.com/api/risk/{wallet_address}"
+        with urllib.request.urlopen(url, timeout=10) as resp:
+            data = json.loads(resp.read().decode())
+            risk = data.get("riskLevel", "unknown")
+            # Map risk to verdict
+            verdict_map = {
+                "low": "allow",
+                "minimal": "allow",
+                "moderate": "review",
+                "elevated": "deny",
+                "high": "deny",
+                "critical": "deny",
+            }
+            verdict = verdict_map.get(risk, "review")
+            return {
+                "wallet": wallet_address,
+                "verdict": verdict,
+                "riskLevel": risk,
+                "escrowPercent": data.get("escrowPercent", 100 if verdict != "allow" else 0),
+                "maxTxValueUSDC": data.get("maxTxValueUSDC", 10 if verdict == "deny" else 1000),
+                "policy": policy,
+            }
+    except Exception as e:
+        return {"error": str(e)}
 `;
   fs.writeFileSync(path.join(projectPath, 'tools', 'solana.py'), solanaTools);
   
@@ -949,25 +1006,68 @@ skills:
   // SAID skill
   const saidSkillMd = `---
 name: said-protocol
-description: SAID Protocol - on-chain identity for AI agents. Verify agents, check trust scores, lookup profiles. Use before transacting with unknown agents.
+description: SAID Protocol — on-chain identity and economic enforcement for AI agents. Verify agents, check trust scores, check staking/slashing, gate transactions. Use before transacting with unknown agents.
 ---
 
 # SAID Protocol Skill
 
-Verify agent identities before you transact.
+Verify agent identities and check economic enforcement before you transact.
 
 ## Verify an Agent
-curl "https://api.saidprotocol.com/api/agents/WALLET_ADDRESS"
+\`\`\`bash
+curl "https://api.saidprotocol.com/api/verify/WALLET_ADDRESS"
+\`\`\`
 
-## Get Trust Score
-curl "https://api.saidprotocol.com/api/trust/WALLET_ADDRESS"
+## Check Enforcement (Staking & Slashing)
+SAID's unique differentiator — agents stake SOL as collateral and get slashed for bad behavior.
+
+\`\`\`bash
+curl "https://api.saidprotocol.com/api/enforcement/WALLET_ADDRESS"
+\`\`\`
+
+Returns: staked SOL, slash history, enforcement tier (economic/reputation/none).
+
+## Check Risk Assessment
+\`\`\`bash
+curl "https://api.saidprotocol.com/api/risk/WALLET_ADDRESS"
+\`\`\`
+
+Returns: risk level, recommended escrow %, max transaction value, marketplace verdict.
+
+## Trust Gate (Policy-Based)
+Quick allow/deny/review check using preset policies:
+
+\`\`\`bash
+# Using the CLI
+npx create-said-agent gate --wallet WALLET_ADDRESS --policy balanced
+
+# Using the API
+curl "https://api.saidprotocol.com/api/risk/WALLET_ADDRESS"
+\`\`\`
+
+Policies: strict, balanced, permissive, marketplace, defi.
 
 ## Your Identity
 Check said.json for your wallet, PDA, and profile link.
 
+## SDK Integration
+\`\`\`bash
+npm install @said-protocol/client
+\`\`\`
+
+\`\`\`typescript
+import { SAIDClient } from '@said-protocol/client';
+
+const client = new SAIDClient();
+const enforcement = await client.getEnforcement('WALLET_ADDRESS');
+console.log(enforcement.staked, enforcement.slashed, enforcement.slashCount);
+\`\`\`
+
 ## Links
 - Profile: https://www.saidprotocol.com/agent.html?wallet=YOUR_WALLET
 - API: https://api.saidprotocol.com
+- SDK: @said-protocol/client on npm
+- Docs: https://github.com/SAID-Protocol/said-sdk
 `;
   fs.writeFileSync(path.join(projectPath, 'skills', 'said', 'SKILL.md'), saidSkillMd);
   
@@ -1189,7 +1289,7 @@ function scaffoldEliza(options: ScaffoldOptions, walletAddress: string): void {
       '@elizaos/client-twitter': '^1.0.0',
       '@elizaos/plugin-solana': '^1.0.0',
       '@solana/web3.js': '^1.98.0',
-      'said-sdk': '^0.7.0',
+      '@said-protocol/client': '^0.19.0',
       'dotenv': '^16.4.5'
     }
   };

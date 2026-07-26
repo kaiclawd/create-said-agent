@@ -1,9 +1,10 @@
 """
-Solana tools for nanobot agents with SAID identity.
+Solana tools for nanobot agents with SAID identity and economic enforcement.
 """
 
 import json
 import os
+import urllib.request
 from pathlib import Path
 
 try:
@@ -36,17 +37,19 @@ WALLET = load_wallet()
 
 # RPC connection
 RPC_URL = os.getenv("SOLANA_RPC_URL", "https://api.mainnet-beta.solana.com")
+SAID_API = "https://api.saidprotocol.com"
+
+
+def _fetch_json(url: str, timeout: int = 10) -> dict:
+    """Fetch JSON from a URL."""
+    with urllib.request.urlopen(url, timeout=timeout) as response:
+        return json.loads(response.read().decode())
+
 
 def get_sol_balance(wallet_address: str = None) -> dict:
     """
     Get SOL balance for a wallet address.
     If no address provided, uses the agent's own wallet.
-    
-    Args:
-        wallet_address: Solana wallet address (optional)
-    
-    Returns:
-        dict with balance info
     """
     if not SOLANA_AVAILABLE:
         return {"error": "Solana SDK not installed. Run: pip install solana"}
@@ -70,13 +73,9 @@ def get_sol_balance(wallet_address: str = None) -> dict:
     except Exception as e:
         return {"error": str(e)}
 
+
 def get_my_identity() -> dict:
-    """
-    Get this agent's SAID identity information.
-    
-    Returns:
-        dict with SAID identity info
-    """
+    """Get this agent's SAID identity information."""
     if not SAID_IDENTITY:
         return {"error": "SAID identity not found. Check said.json"}
     
@@ -89,38 +88,114 @@ def get_my_identity() -> dict:
         "description": SAID_IDENTITY.get("description")
     }
 
+
 def verify_agent(wallet_address: str) -> dict:
     """
-    Verify another agent's SAID identity.
+    Verify another agent's SAID identity and trust score.
     
-    Args:
-        wallet_address: The wallet address to verify
-    
-    Returns:
-        dict with verification info
+    Returns identity info, trust score, tier, and verification status.
     """
-    import urllib.request
-    import json
-    
     try:
-        url = f"https://api.saidprotocol.com/api/agents/{wallet_address}"
-        with urllib.request.urlopen(url, timeout=10) as response:
-            data = json.loads(response.read().decode())
-            return {
-                "verified": True,
-                "name": data.get("name"),
-                "wallet": data.get("wallet"),
-                "pda": data.get("pda"),
-                "isVerified": data.get("isVerified"),
-                "reputationScore": data.get("reputationScore"),
-                "profile": f"https://www.saidprotocol.com/agent.html?wallet={wallet_address}"
-            }
+        data = _fetch_json(f"{SAID_API}/api/verify/{wallet_address}")
+        return {
+            "verified": True,
+            "name": data.get("name"),
+            "wallet": data.get("wallet"),
+            "trustScore": data.get("trustScore", 0),
+            "tier": data.get("tier", "unranked"),
+            "isVerified": data.get("verified", False),
+            "profile": f"https://www.saidprotocol.com/agent.html?wallet={wallet_address}"
+        }
     except urllib.error.HTTPError as e:
         if e.code == 404:
             return {"verified": False, "error": "Agent not found in SAID registry"}
         return {"verified": False, "error": str(e)}
     except Exception as e:
         return {"verified": False, "error": str(e)}
+
+
+def check_enforcement(wallet_address: str) -> dict:
+    """
+    Check staking/slashing enforcement data for an agent.
+    
+    This is SAID's unique differentiator — real economic consequences.
+    Agents stake SOL as collateral and get slashed for bad behavior.
+    No other agent trust protocol has economic enforcement.
+    
+    Returns:
+        staked: SOL amount staked as collateral
+        slashed: whether agent has been slashed
+        slashCount: number of slash events
+        enforcementTier: economic | reputation | none
+        hasSkinInTheGame: whether agent has staked collateral
+    """
+    try:
+        data = _fetch_json(f"{SAID_API}/api/enforcement/{wallet_address}")
+        staked = data.get("stakedAmount", data.get("staked", 0))
+        slash_count = data.get("slashCount", 0)
+        slashed = data.get("slashed", slash_count > 0)
+        tier = data.get("enforcementTier", "economic" if staked > 0 else "none")
+        
+        return {
+            "wallet": wallet_address,
+            "staked": staked,
+            "slashed": slashed,
+            "slashCount": slash_count,
+            "enforcementTier": tier,
+            "hasSkinInTheGame": staked > 0,
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def trust_gate(wallet_address: str, amount_usd: float = None) -> dict:
+    """
+    Run a trust gate check on an agent before transacting.
+    
+    Combines identity verification + enforcement data + risk assessment
+    into a single allow/deny/review verdict with escrow recommendations.
+    
+    Args:
+        wallet_address: Agent's Solana wallet address
+        amount_usd: Transaction amount in USDC (optional, for tailored advice)
+    
+    Returns:
+        verdict: allow | review | deny
+        riskLevel: minimal | low | moderate | elevated | high | critical
+        escrowPercent: recommended escrow hold %
+        maxTxValueUSDC: max recommended transaction value
+    """
+    try:
+        url = f"{SAID_API}/api/risk/{wallet_address}"
+        data = _fetch_json(url)
+        
+        risk = data.get("riskLevel", "unknown")
+        risk_to_verdict = {
+            "low": "allow",
+            "minimal": "allow",
+            "moderate": "review",
+            "elevated": "deny",
+            "high": "deny",
+            "critical": "deny",
+        }
+        verdict = risk_to_verdict.get(risk, "review")
+        
+        result = {
+            "wallet": wallet_address,
+            "verdict": verdict,
+            "riskLevel": risk,
+            "escrowPercent": data.get("escrowPercent", 100 if verdict == "deny" else 0),
+            "maxTxValueUSDC": data.get("maxTxValueUSDC", 10 if verdict == "deny" else 1000),
+        }
+        
+        if amount_usd:
+            result["requestedAmount"] = amount_usd
+            result["withinLimit"] = amount_usd <= result["maxTxValueUSDC"]
+        
+        return result
+    except Exception as e:
+        return {"error": str(e)}
+
 
 # Tool definitions for nanobot
 TOOLS = [
@@ -149,7 +224,7 @@ TOOLS = [
     },
     {
         "name": "verify_agent",
-        "description": "Verify another agent's SAID identity by their wallet address.",
+        "description": "Verify another agent's SAID identity and trust score by wallet address.",
         "function": verify_agent,
         "parameters": {
             "type": "object",
@@ -157,6 +232,40 @@ TOOLS = [
                 "wallet_address": {
                     "type": "string",
                     "description": "The Solana wallet address to verify"
+                }
+            },
+            "required": ["wallet_address"]
+        }
+    },
+    {
+        "name": "check_enforcement",
+        "description": "Check staking/slashing enforcement data for an agent. Shows if they have real SOL collateral at stake (skin-in-the-game) and whether they've been slashed.",
+        "function": check_enforcement,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "wallet_address": {
+                    "type": "string",
+                    "description": "The Solana wallet address to check"
+                }
+            },
+            "required": ["wallet_address"]
+        }
+    },
+    {
+        "name": "trust_gate",
+        "description": "Run a trust gate check before transacting with an agent. Returns allow/deny/review verdict with escrow recommendations. Combines identity + enforcement + risk assessment.",
+        "function": trust_gate,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "wallet_address": {
+                    "type": "string",
+                    "description": "The Solana wallet address to check"
+                },
+                "amount_usd": {
+                    "type": "number",
+                    "description": "Transaction amount in USDC (optional, for tailored escrow advice)"
                 }
             },
             "required": ["wallet_address"]

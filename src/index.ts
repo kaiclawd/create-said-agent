@@ -24,7 +24,7 @@ console.log(chalk.cyan(`
 
 import { loadKeypair, registerOnAPI, registerOnChain, getVerified, getStatus } from './onchain.js';
 import { PublicKey } from '@solana/web3.js';
-import { getScore, submitFeedback, discoverAgents, getLeaderboard, getStats, getRiskAssessment, getCreditScore, assessAgent, getStakingInfo, getTrustCrisisReport } from './api.js';
+import { getScore, submitFeedback, discoverAgents, getLeaderboard, getStats, getRiskAssessment, getCreditScore, assessAgent, getStakingInfo, getTrustCrisisReport, trustGate } from './api.js';
 
 program
   .name('create-said-agent')
@@ -236,6 +236,18 @@ program
   .requiredOption('--wallet <address>', 'Solana wallet address')
   .action(async (opts) => {
     await getTrustCrisisReport(opts.wallet);
+  });
+
+// gate subcommand — quick combined trust gate check
+program
+  .command('gate')
+  .description('🚦 Quick trust gate check — combined allow/deny/review verdict with escrow terms')
+  .requiredOption('--wallet <address>', 'Solana wallet address')
+  .option('--policy <preset>', 'Policy: strict | balanced | permissive | marketplace | defi', 'balanced')
+  .option('--amount <usd>', 'Transaction amount in USDC (optional)')
+  .action(async (opts) => {
+    const amount = opts.amount ? parseFloat(opts.amount) : undefined;
+    await trustGate(opts.wallet, { policy: opts.policy, amount });
   });
 
 program.parse();
